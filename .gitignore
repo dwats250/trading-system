@@ -19,7 +19,3 @@ __pycache__/
 
 # Editor
 .vscode/
-
-# Data (optional - uncomment if needed)
-# data/raw/
-# data/processed/
