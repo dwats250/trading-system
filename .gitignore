@@ -1,4 +1,25 @@
+# Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Env / secrets
 .env
+.env.*
+*.key
+
+# Logs
 *.log
+
+# Temp
+*.tmp
+
+# OS
+.DS_Store
+
+# Editor
+.vscode/
+
+# Data (optional - uncomment if needed)
+# data/raw/
+# data/processed/
