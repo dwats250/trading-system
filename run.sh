@@ -12,6 +12,7 @@ echo "==> Options sniper..."
 python3 -c "from outputs.options_html import save; save()"
 
 echo ""
-echo "Done. Open in browser:"
-echo "  premarket.html"
-echo "  options_sniper.html"
+echo "==> Publishing to GitHub Pages..."
+git add premarket.html options_sniper.html macro_pulse.html
+git commit -m "Update dashboards $(date '+%Y-%m-%d %H:%M')" --quiet
+git push origin main --quiet && echo "Done. Live at: https://dwats250.github.io/trading-system" || echo "Push failed — check connection."

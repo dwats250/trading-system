@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Macro Sniper</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #070f1e;
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      color: #60a5fa;
+      margin-bottom: 0.5rem;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #64748b;
+      margin-bottom: 2.5rem;
+    }
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      width: 100%;
+      max-width: 420px;
+    }
+    a.card {
+      display: block;
+      background: #0d1b2e;
+      border: 1px solid #1e3a5f;
+      border-radius: 12px;
+      padding: 1.25rem 1.5rem;
+      text-decoration: none;
+      color: inherit;
+      transition: border-color 0.15s, background 0.15s;
+    }
+    a.card:hover {
+      border-color: #60a5fa;
+      background: #0f2040;
+    }
+    .card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.3rem;
+    }
+    .card-desc {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+    .arrow {
+      float: right;
+      color: #60a5fa;
+      font-size: 1.1rem;
+    }
+    .updated {
+      margin-top: 2rem;
+      font-size: 0.75rem;
+      color: #334155;
+    }
+  </style>
+</head>
+<body>
+  <h1>Macro Sniper</h1>
+  <p class="subtitle">Trade intelligence dashboard</p>
+
+  <div class="cards">
+    <a class="card" href="premarket.html">
+      <span class="arrow">→</span>
+      <div class="card-title">Pre-Market Report</div>
+      <div class="card-desc">Macro regime, earnings calendar, top setups</div>
+    </a>
+    <a class="card" href="options_sniper.html">
+      <span class="arrow">→</span>
+      <div class="card-title">Options Sniper</div>
+      <div class="card-desc">Scored trade ideas, A+ validator, rejections</div>
+    </a>
+    <a class="card" href="macro_pulse.html">
+      <span class="arrow">→</span>
+      <div class="card-title">Macro Pulse</div>
+      <div class="card-desc">Cross-asset regime read, risk on/off/mixed</div>
+    </a>
+  </div>
+
+  <p class="updated">Last updated: <span id="ts"></span></p>
+  <script>
+    const el = document.getElementById('ts');
+    fetch('premarket.html', {method:'HEAD'})
+      .then(r => { const d = r.headers.get('last-modified'); el.textContent = d ? new Date(d).toLocaleString() : '—'; })
+      .catch(() => { el.textContent = '—'; });
+  </script>
+</body>
+</html>
