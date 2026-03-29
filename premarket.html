@@ -71,8 +71,9 @@
     .macro-table { width: 100%; border-collapse: collapse; }
     .macro-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
     .macro-table tr:last-child { border-bottom: none; }
-    .row-label  { color: var(--muted); padding: 7px 0; width: 40%; }
+    .row-label  { color: var(--muted); padding: 7px 0; width: 38%; }
     .row-price  { font-weight: 600; padding: 7px 8px; }
+    .row-dollar { padding: 7px 6px; font-size: 0.85rem; }
     .row-change { font-weight: 600; padding: 7px 0; text-align: right; }
 
     /* Calendar */
@@ -86,6 +87,11 @@
     .impact-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
     .impact-med  { background: rgba(96,165,250,0.15); color: #93c5fd; }
     .no-events   { color: var(--muted); padding: 12px 0; text-align: center; }
+    .ev-date-header { background: rgba(30,58,95,0.4); color: var(--muted);
+                      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: 0.07em; padding: 6px 4px; }
+    .ev-name a  { color: var(--text); text-decoration: none; }
+    .ev-name a:hover { color: var(--blue); text-decoration: underline; }
 
     /* Setups */
     .setups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
@@ -102,8 +108,36 @@
     .bias-long    { background: rgba(34,197,94,0.15); color: #86efac; }
     .bias-short   { background: rgba(239,68,68,0.15); color: #fca5a5; }
     .bias-neutral { background: rgba(245,158,11,0.15); color: #fde68a; }
-    .grade-ideal   { background: rgba(96,165,250,0.15); color: #93c5fd; }
-    .grade-fallback{ background: rgba(167,139,250,0.15); color: #c4b5fd; }
+    .grade-a { background: rgba(34,197,94,0.15);   color: #86efac; }
+    .grade-b { background: rgba(245,158,11,0.15);  color: #fde68a; }
+    .grade-c { background: rgba(239,68,68,0.15);   color: #fca5a5; }
+
+    /* ── Watchlist — visually and semantically distinct from validated trades ── */
+    .watchlist-label {
+        margin-top: 20px; padding: 6px 0 2px;
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.1em; color: #6b7280;
+        border-top: 1px dashed rgba(75,85,99,0.4);
+    }
+    .watchlist-note {
+        font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; font-style: italic;
+    }
+    .watchlist-card {
+        background: rgba(15,20,30,0.5); border: 1px solid rgba(75,85,99,0.25);
+        border-radius: 8px; padding: 8px 12px; margin-bottom: 5px; opacity: 0.7;
+    }
+    .watchlist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+    .watchlist-ticker { font-weight: 700; font-size: 0.88rem; color: #9ca3af; }
+    .watchlist-grade  { font-size: 0.72rem; margin-left: auto; padding: 1px 7px;
+                        border-radius: 999px; }
+    .watchlist-blocker {
+        font-size: 0.75rem; color: #6b7280;
+    }
+    .watchlist-blocker::before { content: "⛔ "; }
+    /* Off-radar — minimal, no card treatment */
+    .off-radar {
+        margin-top: 10px; font-size: 0.72rem; color: #4b5563; font-style: italic;
+    }
     .setup-row { display: flex; gap: 16px; margin-bottom: 6px; }
     .setup-stat { font-size: 0.85rem; color: var(--muted); }
     .setup-stat strong { color: var(--text); }
@@ -167,7 +201,7 @@
     <div class="report-header">
         <div>
             <div class="report-title">Pre-Market Report</div>
-            <div class="report-meta">Sunday, March 29 2026  —  02:16 AM PST</div>
+            <div class="report-meta">Sunday, March 29 2026  —  04:43 AM PST</div>
         </div>
         <div class="pill-group">
             <span class="pill regime-off">RISK OFF</span>
@@ -207,56 +241,67 @@
         <tr>
             <td class="row-label">Dollar (DXY)</td>
             <td class="row-price">100.19</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+0.29</span></td>
             <td class="row-change up">↑ +0.29%</td>
         </tr>
         <tr>
             <td class="row-label">10Y Yield</td>
             <td class="row-price">4.44</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+0.02</span></td>
             <td class="row-change up">↑ +0.54%</td>
         </tr>
         <tr>
             <td class="row-label">VIX</td>
             <td class="row-price">31.05</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+3.61</span></td>
             <td class="row-change up">↑ +13.16%</td>
         </tr>
         <tr>
             <td class="row-label">USD/JPY</td>
             <td class="row-price">160.29</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+0.90</span></td>
             <td class="row-change up">↑ +0.57%</td>
         </tr>
         <tr>
             <td class="row-label">Gold</td>
             <td class="row-price">4,524.30</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+148.80</span></td>
             <td class="row-change up">↑ +3.40%</td>
         </tr>
         <tr>
             <td class="row-label">Silver</td>
             <td class="row-price">69.80</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+2.13</span></td>
             <td class="row-change up">↑ +3.14%</td>
         </tr>
         <tr>
             <td class="row-label">WTI Oil</td>
             <td class="row-price">99.64</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+5.16</span></td>
             <td class="row-change up">↑ +5.46%</td>
         </tr>
         <tr>
             <td class="row-label">Brent Oil</td>
             <td class="row-price">105.32</td>
+            <td class="row-dollar"><span class="row-change-dollar dn">-2.69</span></td>
             <td class="row-change dn">↓ -2.49%</td>
         </tr>
         <tr>
             <td class="row-label">HYG Credit</td>
             <td class="row-price">78.72</td>
+            <td class="row-dollar"><span class="row-change-dollar dn">-0.20</span></td>
             <td class="row-change dn">↓ -0.25%</td>
         </tr>
         <tr>
             <td class="row-label">Bitcoin</td>
-            <td class="row-price">66,630</td>
-            <td class="row-change up">↑ +0.47%</td>
+            <td class="row-price">66,825</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+505.78</span></td>
+            <td class="row-change up">↑ +0.76%</td>
         </tr>
         <tr>
             <td class="row-label">Copper</td>
             <td class="row-price">5.50</td>
+            <td class="row-dollar"><span class="row-change-dollar up">+0.05</span></td>
             <td class="row-change up">↑ +0.89%</td>
         </tr>
                 </table>
@@ -273,7 +318,7 @@
         <tr>
             <td class="ev-time">06:00 UTC</td>
             <td><span class="impact-badge impact-med">MED</span></td>
-            <td class="ev-name">ECOFIN Meetings</td>
+            <td class="ev-name"><a href="https://www.nasdaq.com/market-activity/economic-events?date=2026-03-29" target="_blank" rel="noopener">ECOFIN Meetings</a></td>
             <td class="ev-est">—</td>
         </tr>
                 </table>
@@ -285,60 +330,88 @@
         </div>
     </div>
 
+    <!-- Upcoming This Month -->
+    <div class="section">
+        <div class="section-title">Upcoming This Month — High Impact Only</div>
+        <div class="card">
+            <table class="cal-table">
+                <tr><td colspan="4" class="ev-date-header">Tue  Mar 31</td></tr>
+        <tr>
+            <td class="ev-time">05:00 UTC</td>
+            <td><span class="impact-badge impact-high">HIGH</span></td>
+            <td class="ev-name"><a href="https://www.nasdaq.com/market-activity/economic-events?date=2026-03-31" target="_blank" rel="noopener">Consumer Inflation Expectation</a></td>
+            <td class="ev-est">—</td>
+        </tr>
+        <tr>
+            <td class="ev-time">10:30 UTC</td>
+            <td><span class="impact-badge impact-high">HIGH</span></td>
+            <td class="ev-name"><a href="https://www.nasdaq.com/market-activity/economic-events?date=2026-03-31" target="_blank" rel="noopener">Dallas Fed Mfg Business Index</a></td>
+            <td class="ev-est">—</td>
+        </tr>
+        <tr>
+            <td class="ev-time">10:30 UTC</td>
+            <td><span class="impact-badge impact-high">HIGH</span></td>
+            <td class="ev-name"><a href="https://www.nasdaq.com/market-activity/economic-events?date=2026-03-31" target="_blank" rel="noopener">Fed Chair Powell Speaks</a></td>
+            <td class="ev-est">—</td>
+        </tr>
+        <tr>
+            <td class="ev-time">16:00 UTC</td>
+            <td><span class="impact-badge impact-high">HIGH</span></td>
+            <td class="ev-name"><a href="https://www.nasdaq.com/market-activity/economic-events?date=2026-03-31" target="_blank" rel="noopener">FOMC Member Williams Speaks</a></td>
+            <td class="ev-est">—</td>
+        </tr>
+            </table>
+        </div>
+    </div>
+
     <!-- Setups -->
     <div class="section">
-        <div class="section-title">Top Setups</div>
+        <div class="section-title">Validated Top Trades <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:6px">structural guardrails only — options not yet validated</span></div>
         <div class="regime-note ">⚠ RISK OFF — reduce size, favor shorts or cash</div>
         <div class="setups-grid">
-            
-        <div class="setup-card">
-            <div class="setup-header">
-                <span class="setup-ticker">UUP</span>
-                <span class="setup-bias bias-long">LONG</span>
-                <span class="setup-grade grade-ideal">IDEAL</span>
+            <div class="no-setups">No validated trades today — stay flat or wait</div>
+        <div class="watchlist-label">Watchlist Setups — Good Structure, Not Trade-Ready</div>
+        <div class="watchlist-note">Chart structure is identifiable but at least one guardrail blocks execution. Monitor only.</div>
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">NVDA</span>
+                    <span class="setup-bias bias-short" style="font-size:0.72rem;padding:1px 7px">SHORT</span>
+                    <span class="watchlist-grade grade-a">A</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: R:R below 2:1 — risk not justified</div>
             </div>
-            <div class="setup-row">
-                <span class="setup-stat">Price <strong>27.84</strong></span>
-                <span class="setup-stat">RSI <strong>63.2</strong></span>
-                <span class="setup-stat">EMA <strong>bullish</strong></span>
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">USO</span>
+                    <span class="setup-bias bias-long" style="font-size:0.72rem;padding:1px 7px">LONG</span>
+                    <span class="watchlist-grade grade-a">A</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: R:R below 2:1 — risk not justified</div>
             </div>
-            <div class="setup-levels">
-                S: 27.28 &nbsp;|&nbsp; R: 27.91
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">SLB</span>
+                    <span class="setup-bias bias-long" style="font-size:0.72rem;padding:1px 7px">LONG</span>
+                    <span class="watchlist-grade grade-a">A</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: R:R below 2:1 — risk not justified</div>
             </div>
-            <div class="setup-entry">Entry near EMA9 (~27.71) or break above 27.91</div>
-        </div>
-        <div class="setup-card">
-            <div class="setup-header">
-                <span class="setup-ticker">XLE</span>
-                <span class="setup-bias bias-neutral">NEUTRAL</span>
-                <span class="setup-grade grade-fallback">FALLBACK</span>
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">SPY</span>
+                    <span class="setup-bias bias-short" style="font-size:0.72rem;padding:1px 7px">SHORT</span>
+                    <span class="watchlist-grade grade-a">A</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: R:R below 2:1 — risk not justified</div>
             </div>
-            <div class="setup-row">
-                <span class="setup-stat">Price <strong>62.56</strong></span>
-                <span class="setup-stat">RSI <strong>83.5</strong></span>
-                <span class="setup-stat">EMA <strong>bullish</strong></span>
-            </div>
-            <div class="setup-levels">
-                S: 54.97 &nbsp;|&nbsp; R: 62.79
-            </div>
-            <div class="setup-entry">No clean entry — wait for structure</div>
-        </div>
-        <div class="setup-card">
-            <div class="setup-header">
-                <span class="setup-ticker">XOM</span>
-                <span class="setup-bias bias-neutral">NEUTRAL</span>
-                <span class="setup-grade grade-fallback">FALLBACK</span>
-            </div>
-            <div class="setup-row">
-                <span class="setup-stat">Price <strong>170.99</strong></span>
-                <span class="setup-stat">RSI <strong>76.4</strong></span>
-                <span class="setup-stat">EMA <strong>bullish</strong></span>
-            </div>
-            <div class="setup-levels">
-                S: 147.66 &nbsp;|&nbsp; R: 171.23
-            </div>
-            <div class="setup-entry">No clean entry — wait for structure</div>
-        </div><div class="skip-list">Skip: GDX, SLV, TLT, SPY, QQQ</div>
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">QQQ</span>
+                    <span class="setup-bias bias-short" style="font-size:0.72rem;padding:1px 7px">SHORT</span>
+                    <span class="watchlist-grade grade-a">A</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: R:R below 2:1 — risk not justified</div>
+            </div><div class="off-radar">Not on radar (weak chart / no structure): IWM, SLV, GDX, GLD, SILJ, XLE, OXY, XOM, CVX, GUSH, LNG, HAL, AMD</div>
         </div>
     </div>
 
@@ -362,7 +435,7 @@
         </tr>
         <tr>
             <td class="sector-name">Credit</td>
-            <td class="sector-cells"><span class="sector-item dn">HYG ↓ -0.25%</span><span class="sector-item up">BTC ↑ +0.47%</span></td>
+            <td class="sector-cells"><span class="sector-item dn">HYG ↓ -0.25%</span><span class="sector-item up">BTC ↑ +0.76%</span></td>
         </tr>
             </table>
         </div>
