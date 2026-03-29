@@ -9,7 +9,7 @@ from datetime import datetime
 from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
-from reports.options_sniper import TradeIdea
+from reports.options_sniper import Rejection, TradeIdea
 
 
 def _regime_cls(regime: str) -> str:
@@ -28,15 +28,42 @@ def _liq_cls(liq: str) -> str:
     return {"High": "liq-high", "Medium": "liq-med", "Low": "liq-low"}.get(liq, "")
 
 
-def _rank_header(rank: int, grade: str) -> str:
-    icons  = {1: "🥇", 2: "🟡", 3: "⚪"}
-    labels = {"A": "A SETUP", "B": "WATCH", "C": "PASS"}
-    return f'{icons.get(rank, f"#{rank}")} #{rank} &nbsp; <span class="grade-badge {_grade_cls(grade)}">{labels[grade]}</span>'
+def _score_cls(score: int) -> str:
+    if score >= 80: return "score-a"
+    if score >= 60: return "score-b"
+    return "score-c"
+
+
+def _composite_grade_cls(grade: str) -> str:
+    return {"A+": "grade-aplus", "A": "grade-a", "B": "grade-b"}.get(grade, "grade-c")
+
+
+def _rank_header(rank: int, idea: TradeIdea) -> str:
+    icons = {1: "🥇", 2: "🟡", 3: "⚪"}
+    grade = idea.composite_grade
+    grade_labels = {"A+": "A+ SETUP", "A": "A SETUP", "B": "WATCH"}
+    label = grade_labels.get(grade, grade)
+    return (
+        f'{icons.get(rank, f"#{rank}")} #{rank} &nbsp; '
+        f'<span class="grade-badge {_composite_grade_cls(grade)}">{label}</span> &nbsp; '
+        f'<span class="score-badge {_score_cls(idea.score)}">{idea.score}/100</span>'
+    )
 
 
 def _idea_card(idea: TradeIdea) -> str:
     s    = idea.setup
     opts = idea.options
+    is_watch = idea.composite_grade == "B"
+
+    # A+ gap — show what prevented full A+ on A-grade ideas
+    aplus_gap_html = ""
+    if idea.composite_grade == "A" and idea.failures:
+        items = " &nbsp;·&nbsp; ".join(idea.failures)
+        aplus_gap_html = f'<div class="aplus-gap">A+ gap: {items}</div>'
+
+    watch_banner = ""
+    if is_watch:
+        watch_banner = '<div class="watch-banner">WATCH ONLY — not tradeable today</div>'
 
     opts_html = ""
     if opts:
@@ -52,15 +79,19 @@ def _idea_card(idea: TradeIdea) -> str:
                 <span class="liq-badge {_liq_cls(opts.liquidity)}">{opts.liquidity}</span>
                 <span class="opts-meta">IV {opts.iv_pct} &nbsp;|&nbsp; Bid/Ask {opts.bid}/{opts.ask} &nbsp;|&nbsp; OI {opts.open_interest:,}</span>
             </div>
+            <div class="opts-row">
+                <span class="opts-label">Delta</span>
+                <span class="opts-delta">{opts.delta_guidance}</span>
+            </div>
             <div class="opts-note">{opts.structure_reason}</div>
         </div>"""
     else:
         opts_html = '<div class="opts-unavail">Options data unavailable — check chain manually</div>'
 
     return f"""
-    <div class="idea-card rank-{idea.rank}">
+    <div class="idea-card rank-{idea.rank}{' watch-card' if is_watch else ''}">
         <div class="idea-header">
-            <div class="idea-rank">{_rank_header(idea.rank, s.grade)}</div>
+            <div class="idea-rank">{_rank_header(idea.rank, idea)}</div>
             <div class="idea-ticker-wrap">
                 <span class="idea-ticker">{s.ticker}</span>
                 <span class="bias-badge {_bias_cls(s.bias)}">{s.bias}</span>
@@ -68,6 +99,8 @@ def _idea_card(idea: TradeIdea) -> str:
             <div class="idea-conf">Confidence <strong>{s.confidence}/10</strong></div>
         </div>
 
+        {watch_banner}
+        {aplus_gap_html}
         <div class="idea-why">{idea.why}</div>
 
         <div class="idea-grid">
@@ -84,8 +117,8 @@ def _idea_card(idea: TradeIdea) -> str:
                 <div class="cell-val">{s.rsi_val}</div>
             </div>
             <div class="idea-cell">
-                <div class="cell-label">Price</div>
-                <div class="cell-val">{s.price}</div>
+                <div class="cell-label">R:R</div>
+                <div class="cell-val rr-val">{s.rr:.1f}:1</div>
             </div>
         </div>
 
@@ -93,6 +126,10 @@ def _idea_card(idea: TradeIdea) -> str:
             <div class="level-item">
                 <span class="level-label">Entry</span>
                 <span class="level-val">{s.entry_note}</span>
+            </div>
+            <div class="level-item">
+                <span class="level-label">Target</span>
+                <span class="level-val level-target">{s.resistance}</span>
             </div>
             <div class="level-item">
                 <span class="level-label">Invalidation</span>
@@ -105,6 +142,30 @@ def _idea_card(idea: TradeIdea) -> str:
         </div>
 
         {opts_html}
+    </div>"""
+
+
+def _rejection_section(rejections: list[Rejection]) -> str:
+    if not rejections:
+        return ""
+    rows = ""
+    for r in rejections:
+        reasons_html = "".join(f"<li>{reason}</li>" for reason in r.reasons)
+        rows += f"""
+        <div class="reject-row">
+            <div class="reject-header">
+                <span class="reject-ticker">{r.ticker}</span>
+                <span class="reject-grade">Chart {r.chart_grade}</span>
+                <span class="score-badge score-c">{r.score}/100</span>
+            </div>
+            <ul class="reject-reasons">{reasons_html}</ul>
+        </div>"""
+    return f"""
+    <div class="rejection-section">
+        <div class="section-title">Rejected Setups</div>
+        <div class="card">
+            {rows}
+        </div>
     </div>"""
 
 
@@ -223,9 +284,14 @@ _STYLE = """
     .idea-header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
     .idea-rank { font-size: 0.95rem; font-weight: 600; }
     .grade-badge { padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; }
+    .grade-aplus { background: rgba(167,139,250,0.2); color: #c4b5fd; border: 1px solid rgba(167,139,250,0.4); }
     .grade-a { background: rgba(34,197,94,0.15);  color: #86efac; }
     .grade-b { background: rgba(245,158,11,0.15); color: #fde68a; }
     .grade-c { background: rgba(156,163,175,0.15);color: #9ca3af; }
+    .score-badge { padding: 2px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
+    .score-a { background: rgba(34,197,94,0.12);  color: #86efac; }
+    .score-b { background: rgba(245,158,11,0.12); color: #fde68a; }
+    .score-c { background: rgba(239,68,68,0.12);  color: #fca5a5; }
     .idea-ticker-wrap { display: flex; align-items: center; gap: 8px; }
     .idea-ticker { font-size: 1.35rem; font-weight: 800; }
     .bias-badge { padding: 3px 12px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; }
@@ -252,10 +318,34 @@ _STYLE = """
     .opts-val { font-weight: 700; font-size: 0.9rem; }
     .opts-contract { color: var(--blue); font-size: 0.85rem; }
     .opts-meta { color: var(--muted); font-size: 0.82rem; }
+    .opts-delta { color: var(--purple); font-size: 0.82rem; }
     .opts-note { color: var(--muted); font-size: 0.82rem; border-left: 2px solid var(--border);
                  padding-left: 8px; margin-top: 4px; }
     .opts-unavail { color: var(--muted); font-size: 0.82rem; border-top: 1px solid var(--border);
                     padding-top: 10px; }
+    .watch-card { border-color: rgba(245,158,11,0.3); opacity: 0.85; }
+    .watch-banner {
+        background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
+        border-radius: 8px; padding: 6px 12px; margin-bottom: 10px;
+        font-size: 0.8rem; font-weight: 600; color: #fde68a;
+    }
+    .aplus-gap {
+        background: rgba(167,139,250,0.06); border: 1px solid rgba(167,139,250,0.15);
+        border-radius: 8px; padding: 6px 12px; margin-bottom: 10px;
+        font-size: 0.8rem; color: #c4b5fd;
+    }
+    .rr-val { color: var(--green); }
+    .level-target { color: var(--green); }
+    .rejection-section { margin-bottom: 16px; }
+    .section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                     letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px; }
+    .reject-row { padding: 10px 0; border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .reject-row:last-child { border-bottom: none; }
+    .reject-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    .reject-ticker { font-weight: 700; font-size: 0.95rem; }
+    .reject-grade { color: var(--muted); font-size: 0.8rem; }
+    .reject-reasons { list-style: disc; padding-left: 20px; color: var(--muted); font-size: 0.82rem; }
+    .reject-reasons li { margin: 2px 0; }
     .liq-badge { padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
     .liq-high { background: rgba(34,197,94,0.15);  color: #86efac; }
     .liq-med  { background: rgba(245,158,11,0.15); color: #fde68a; }
@@ -299,6 +389,7 @@ def build_options_html(
     playbook: dict,
     focus: dict,
     incidents: list[str],
+    rejections: list[Rejection] | None = None,
 ) -> str:
     now = datetime.now().strftime("%A, %B %d %Y  —  %I:%M %p PST")
     regime   = classify(data_map)
@@ -344,7 +435,10 @@ def build_options_html(
     if ideas:
         ideas_html = "".join(_idea_card(i) for i in ideas[:3])
     else:
-        ideas_html = '<div class="no-setups">No A or B setups found — WAIT</div>'
+        ideas_html = '<div class="no-setups">No setups cleared guardrails — WAIT</div>'
+
+    # Rejection section
+    rejections_html = _rejection_section(rejections or [])
 
     # Conclusion
     from reports.options_sniper import _conclusion
@@ -408,6 +502,8 @@ def build_options_html(
         {ideas_html}
     </div>
 
+    {rejections_html}
+
     <div class="conclusion">{conclusion_text}</div>
 
     <div class="card">
@@ -423,8 +519,9 @@ def build_options_html(
 
 
 def save(path: str = "options_sniper.html", data_map: dict | None = None,
-         ideas: list | None = None, playbook: dict | None = None,
-         focus: dict | None = None, incidents: list | None = None) -> None:
+         ideas: list | None = None, rejections: list | None = None,
+         playbook: dict | None = None, focus: dict | None = None,
+         incidents: list | None = None) -> None:
     from config.tickers import MACRO_SYMBOLS
     from core.fetcher import fetch_all
     from macro.focus import route
@@ -435,16 +532,16 @@ def save(path: str = "options_sniper.html", data_map: dict | None = None,
 
     if data_map is None:
         data_map = fetch_all(MACRO_SYMBOLS)
-    if ideas is None:
-        _, ideas = build_report(data_map)
+    if ideas is None or rejections is None:
+        _, ideas, rejections = build_report(data_map)
     if playbook is None or focus is None or incidents is None:
         regime = classify(data_map)
         primary, secondary = drivers(data_map)
         playbook  = playbook  or generate(regime, primary, secondary)
-        focus     = focus     or route(primary, secondary)
+        focus     = focus     or route(primary, secondary, regime)
         incidents = incidents or detect(data_map)
 
-    html = build_options_html(data_map, ideas, playbook, focus, incidents)
+    html = build_options_html(data_map, ideas, playbook, focus, incidents, rejections)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"HTML saved → {path}")

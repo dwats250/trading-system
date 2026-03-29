@@ -11,6 +11,7 @@ import yfinance as yf
 from sniper.analysis import (
     add_indicators,
     chart_grade,
+    compute_rr,
     confidence_score,
     detect_setup_type,
     ema_alignment,
@@ -38,6 +39,7 @@ class Setup:
     bias:        str        # LONG / SHORT / NEUTRAL
     entry_note:  str
     invalidation: float     # price that proves trade wrong
+    rr:          float      # risk/reward ratio (reward ÷ risk)
 
 
 def _fetch(symbol: str) -> object | None:
@@ -99,6 +101,7 @@ def scan(tickers: dict[str, str]) -> list[Setup]:
         conf       = confidence_score(score, setup_type, alignment)
         bias       = _bias(alignment, rsi_val)
         inv        = invalidation_level(bias, support, e21, e50)
+        rr         = compute_rr(bias, price, support, resistance, inv)
         note       = _entry_note(bias, price, e9, e21, resistance, support, setup_type)
 
         setups.append(Setup(
@@ -109,6 +112,7 @@ def scan(tickers: dict[str, str]) -> list[Setup]:
             score=score, grade=grade,
             confidence=conf, setup_type=setup_type,
             bias=bias, entry_note=note, invalidation=inv,
+            rr=rr,
         ))
 
     # Sort: A before B before C, then by confidence descending

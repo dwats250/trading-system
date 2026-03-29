@@ -132,3 +132,31 @@ def invalidation_level(
     if bias == "SHORT":
         return round(max(support, e21) * 1.01, 2)
     return round(support, 2)
+
+
+def compute_rr(
+    bias: str,
+    price: float,
+    support: float,
+    resistance: float,
+    invalidation: float,
+) -> float:
+    """
+    Risk/Reward ratio (reward ÷ risk).
+
+    Long:  reward = resistance − price,  risk = price − invalidation
+    Short: reward = price − support,     risk = invalidation − price
+
+    Returns 0.0 when risk is zero or negative (undefined / invalid level).
+    """
+    if bias == "LONG":
+        reward = resistance - price
+        risk   = price - invalidation
+    elif bias == "SHORT":
+        reward = price - support
+        risk   = invalidation - price
+    else:
+        return 0.0
+    if risk <= 0:
+        return 0.0
+    return round(reward / risk, 2)

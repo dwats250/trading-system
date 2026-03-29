@@ -44,6 +44,7 @@ class OptionsAnalysis:
     suggested_structure: str       # Long Call / Debit Call Spread / Long Put / etc.
     structure_reason:    str       # why this structure was chosen
     contract_note:       str       # e.g. "Apr 24 $63 Call"
+    delta_guidance:      str       # recommended delta range + rationale
 
 
 def _find_expiry(expirations: tuple, target_dte_min: int = 25, target_dte_max: int = 50) -> str | None:
@@ -80,7 +81,7 @@ def _suggest_structure(bias: str, iv: float, liquidity: str) -> tuple[str, str]:
     - High IV → use spreads to reduce premium cost
     - Low liquidity → always use spreads (defined risk, easier to fill)
     """
-    high_iv = iv > 0.45   # above 45% IV is expensive for most ETFs
+    high_iv  = iv > 0.45   # above 45% IV is expensive for most ETFs
     poor_liq = liquidity == "Low"
 
     if bias == "LONG":
@@ -94,6 +95,31 @@ def _suggest_structure(bias: str, iv: float, liquidity: str) -> tuple[str, str]:
         return "Long Put", "Clean bearish setup with reasonable IV"
 
     return "No position", "No clear directional bias"
+
+
+def _delta_guidance(iv: float, structure: str) -> str:
+    """
+    Recommend a delta range based on IV environment and chosen structure.
+
+    Outright options (Long Call/Put):
+      - Normal IV → ATM (0.45–0.55) gives best directional response per dollar
+      - High IV   → near-ATM (0.40–0.50) to limit premium while staying responsive
+
+    Spreads (Debit Spread):
+      - Long leg slightly OTM keeps net debit lower
+      - High IV spreads → go further OTM to stay under 33% of spread width in cost
+    """
+    is_spread = "Spread" in structure
+    high_iv   = iv > 0.45
+
+    if is_spread:
+        if high_iv:
+            return "0.30–0.40 (OTM long leg) — IV elevated, spread limits premium cost"
+        return "0.35–0.45 (slight OTM long leg) — defined risk, balance cost vs. delta"
+
+    if high_iv:
+        return "0.40–0.50 (near ATM) — IV elevated, stay ATM to minimize overpay"
+    return "0.45–0.55 (ATM) — clean setup, maximize directional exposure"
 
 
 def analyze(ticker: str, bias: str, current_price: float) -> OptionsAnalysis | None:
@@ -137,6 +163,7 @@ def analyze(ticker: str, bias: str, current_price: float) -> OptionsAnalysis | N
 
         liquidity = _liquidity_score(volume, oi, spread_pct)
         structure, reason = _suggest_structure(bias, iv, liquidity)
+        delta_guide = _delta_guidance(iv, structure)
 
         exp_label = datetime.strptime(expiry, "%Y-%m-%d").strftime("%b %d")
         option_type = "Call" if bias in ("LONG", "NEUTRAL") else "Put"
@@ -158,6 +185,7 @@ def analyze(ticker: str, bias: str, current_price: float) -> OptionsAnalysis | N
             suggested_structure=structure,
             structure_reason=reason,
             contract_note=contract_note,
+            delta_guidance=delta_guide,
         )
 
     except Exception:
