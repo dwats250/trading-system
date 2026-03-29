@@ -1,0 +1,127 @@
+diff --git a/outputs/options_html.py b/outputs/options_html.py
+index fc1a63b..9ea47a9 100644
+--- a/outputs/options_html.py
++++ b/outputs/options_html.py
+@@ -484,7 +484,7 @@ _STYLE = """
+     .watch-card { border-color: rgba(245,158,11,0.3); opacity: 0.85; }
+     .watch-banner {
+         background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
+-        border-radius: 8px; padding: 6px 12px; margin-bottom: 10px;
++        border-radius: 8px; padding: 6px 12px; margin-bottom: 6px;
+         font-size: 0.8rem; font-weight: 600; color: #fde68a;
+     }
+     .aplus-gap {
+diff --git a/outputs/premarket_html.py b/outputs/premarket_html.py
+index f9c1873..c0ee794 100644
+--- a/outputs/premarket_html.py
++++ b/outputs/premarket_html.py
+@@ -11,7 +11,6 @@ from macro.incidents import detect
+ from macro.regime import classify, cross_asset_read, drivers
+ from reports.calendar import get_events, get_month_events
+ 
+-
+ # ── Helpers ──────────────────────────────────────────────────
+ 
+ 
+diff --git a/reports/options_sniper.py b/reports/options_sniper.py
+index 54e543a..dab8985 100644
+--- a/reports/options_sniper.py
++++ b/reports/options_sniper.py
+@@ -41,6 +41,8 @@ from macro.playbook import format_playbook, generate
+ from macro.regime import classify, cross_asset_read, drivers
+ from macro.session import current_session
+ from options.chain import OptionsAnalysis, analyze
++from sniper import rescanner as _rescanner
++from sniper.rescanner import INTERVAL_DEFAULT
+ from sniper.scanner import Setup, scan
+ 
+ 
+@@ -53,6 +55,8 @@ class TradeIdea:
+     score:           int             # composite 0-100
+     composite_grade: str             # A+ / A / B
+     failures:        list[str] = field(default_factory=list)  # A+ checklist failures
++    trigger_condition: str = ""  # Phase 2B: primary condition to become tradeable (Tier 2 only)
++    trigger_type:      str = ""  # Phase 2C: category of blocking reason (rr/grade/regime/liquidity)
+ 
+ 
+ @dataclass
+@@ -163,6 +167,53 @@ def _aplus_checklist(setup: Setup, opts: OptionsAnalysis | None, regime: str) ->
+ 
+ # ── Why string ────────────────────────────────────────────────
+ 
++def _derive_trigger(reasons: list[str]) -> str:
++    """Phase 2B single-source trigger mapper: first blocking reason → forward-looking condition."""
++    checks = [
++        ("regime",         "Regime shifts to align with setup bias"),
++        ("R:R",            "R:R improves to ≥ 2:1"),
++        ("Chart grade",    "Chart grade upgrades to A"),
++        ("No clear chart", "Clear breakout or breakdown structure forms"),
++        ("liquidity",      "Options liquidity improves"),
++    ]
++    for keyword, label in checks:
++        for r in reasons:
++            if keyword.lower() in r.lower():
++                return label
++    return reasons[0] if reasons else "Primary blocking condition resolves"
++
++
++def _b_grade_trigger(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
++    """Sniper Tier 2: synthesize first soft-blocking reason and delegate to _derive_trigger."""
++    aligned = (
++        (regime == "RISK ON"  and setup.bias == "LONG") or
++        (regime == "RISK OFF" and setup.bias == "SHORT")
++    )
++    if not aligned:
++        # Bias-specific label — cannot be derived from a generic failure string
++        return f"Regime shifts to align with {setup.bias} bias"
++    if opts and opts.liquidity == "Medium":
++        return _derive_trigger(["Options liquidity insufficient"])
++    if setup.rr < 3.0:
++        return "R:R strengthens to ≥ 3:1"
++    return "Composite score reaches 80 — setup conviction improves"
++
++
++def _b_grade_trigger_type(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
++    """Phase 2C: mirror _b_grade_trigger branches, returning trigger_type instead of label."""
++    aligned = (
++        (regime == "RISK ON"  and setup.bias == "LONG") or
++        (regime == "RISK OFF" and setup.bias == "SHORT")
++    )
++    if not aligned:
++        return "regime"
++    if opts and opts.liquidity == "Medium":
++        return "liquidity"
++    if setup.rr < 3.0:
++        return "rr"
++    return ""
++
++
+ def _build_why(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
+     parts = [f"{regime} regime"]
+     if setup.alignment != "mixed":
+@@ -318,6 +369,8 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea],
+             ideas.append(TradeIdea(
+                 setup=s, options=opts, rank=0, why=why,
+                 score=score, composite_grade="B",
++                trigger_condition=_b_grade_trigger(s, opts, regime),
++                trigger_type=_b_grade_trigger_type(s, opts, regime),
+             ))
+             continue
+ 
+@@ -396,7 +449,15 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea],
+     return "\n".join(lines), ideas, rejections
+ 
+ 
+-def run(macro_data: dict | None = None) -> None:
++def run(
++    macro_data: dict | None = None,
++    rescan: bool = False,
++    interval: int = INTERVAL_DEFAULT,
++    max_cycles: int | None = None,
++) -> None:
+     report, ideas, rejections = build_report(macro_data)
+     print(report)
+     send(report, title="Options Sniper")
++
++    if rescan and ideas:
++        _rescanner.run_loop(ideas, interval=interval, max_cycles=max_cycles)

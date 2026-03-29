@@ -53,6 +53,8 @@ class TradeIdea:
     score:           int             # composite 0-100
     composite_grade: str             # A+ / A / B
     failures:        list[str] = field(default_factory=list)  # A+ checklist failures
+    trigger_condition: str = ""  # Phase 2B: primary condition to become tradeable (Tier 2 only)
+    trigger_type:      str = ""  # Phase 2C: category of blocking reason (rr/grade/regime/liquidity)
 
 
 @dataclass
@@ -162,6 +164,53 @@ def _aplus_checklist(setup: Setup, opts: OptionsAnalysis | None, regime: str) ->
 
 
 # ── Why string ────────────────────────────────────────────────
+
+def _derive_trigger(reasons: list[str]) -> str:
+    """Phase 2B single-source trigger mapper: first blocking reason → forward-looking condition."""
+    checks = [
+        ("regime",         "Regime shifts to align with setup bias"),
+        ("R:R",            "R:R improves to ≥ 2:1"),
+        ("Chart grade",    "Chart grade upgrades to A"),
+        ("No clear chart", "Clear breakout or breakdown structure forms"),
+        ("liquidity",      "Options liquidity improves"),
+    ]
+    for keyword, label in checks:
+        for r in reasons:
+            if keyword.lower() in r.lower():
+                return label
+    return reasons[0] if reasons else "Primary blocking condition resolves"
+
+
+def _b_grade_trigger(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
+    """Sniper Tier 2: synthesize first soft-blocking reason and delegate to _derive_trigger."""
+    aligned = (
+        (regime == "RISK ON"  and setup.bias == "LONG") or
+        (regime == "RISK OFF" and setup.bias == "SHORT")
+    )
+    if not aligned:
+        # Bias-specific label — cannot be derived from a generic failure string
+        return f"Regime shifts to align with {setup.bias} bias"
+    if opts and opts.liquidity == "Medium":
+        return _derive_trigger(["Options liquidity insufficient"])
+    if setup.rr < 3.0:
+        return "R:R strengthens to ≥ 3:1"
+    return "Composite score reaches 80 — setup conviction improves"
+
+
+def _b_grade_trigger_type(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
+    """Phase 2C: mirror _b_grade_trigger branches, returning trigger_type instead of label."""
+    aligned = (
+        (regime == "RISK ON"  and setup.bias == "LONG") or
+        (regime == "RISK OFF" and setup.bias == "SHORT")
+    )
+    if not aligned:
+        return "regime"
+    if opts and opts.liquidity == "Medium":
+        return "liquidity"
+    if setup.rr < 3.0:
+        return "rr"
+    return ""
+
 
 def _build_why(setup: Setup, opts: OptionsAnalysis | None, regime: str) -> str:
     parts = [f"{regime} regime"]
@@ -318,6 +367,8 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
             ideas.append(TradeIdea(
                 setup=s, options=opts, rank=0, why=why,
                 score=score, composite_grade="B",
+                trigger_condition=_b_grade_trigger(s, opts, regime),
+                trigger_type=_b_grade_trigger_type(s, opts, regime),
             ))
             continue
 
@@ -396,7 +447,20 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     return "\n".join(lines), ideas, rejections
 
 
-def run(macro_data: dict | None = None) -> None:
+def run(
+    macro_data: dict | None = None,
+    rescan: bool = False,
+    interval: int | None = None,
+    max_cycles: int | None = None,
+) -> None:
     report, ideas, rejections = build_report(macro_data)
     print(report)
     send(report, title="Options Sniper")
+
+    if rescan and ideas:
+        from sniper import rescanner as _rescanner  # deferred — breaks circular import
+        _rescanner.run_loop(
+            ideas,
+            interval=interval if interval is not None else _rescanner.INTERVAL_DEFAULT,
+            max_cycles=max_cycles,
+        )

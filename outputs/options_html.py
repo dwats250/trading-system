@@ -484,7 +484,7 @@ _STYLE = """
     .watch-card { border-color: rgba(245,158,11,0.3); opacity: 0.85; }
     .watch-banner {
         background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2);
-        border-radius: 8px; padding: 6px 12px; margin-bottom: 10px;
+        border-radius: 8px; padding: 6px 12px; margin-bottom: 6px;
         font-size: 0.8rem; font-weight: 600; color: #fde68a;
     }
     .aplus-gap {
