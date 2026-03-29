@@ -10,15 +10,18 @@ Macro Suite is a modular trading intelligence system designed to:
 - Surface high-probability trade opportunities
 - Provide actionable insights via terminal and mobile environments
 
+The system is built primarily for fast decision-making, not data overload.
+
 ---
 
 ## 2. Core Philosophy
 
 - Macro → Fundamentals → Technicals
 - Focus on drivers, not noise
-- Lightweight, fast, and readable outputs
-- Built for decision clarity, not data overload
+- Clarity over complexity
+- Only act on high-quality setups
 - Mobile-first usability (Termux + notifications)
+- Reduce emotional trading through structured outputs
 
 ---
 
@@ -26,9 +29,9 @@ Macro Suite is a modular trading intelligence system designed to:
 
 ### 3.1 Macro Pulse
 
-Purpose: Real-time macro awareness
+**Purpose:** Real-time macro awareness
 
-Tracks:
+**Tracks:**
 - DXY (Dollar strength)
 - US10Y (rates / liquidity)
 - Oil (inflation / geopolitical driver)
@@ -36,69 +39,78 @@ Tracks:
 - SPY / NDX (equity direction)
 - Gold / Silver (monetary stress)
 
-Outputs:
+**Outputs:**
 - Regime classification (risk-on / risk-off / mixed)
 - Primary driver
 - Secondary driver
 - Directional bias
 
-Features:
+**Features:**
 - Hourly updates
 - Session awareness (Asia / London / NY)
-- Incident detection for large moves
+- Incident detection:
+  - Rate spikes
+  - Dollar breakouts
+  - Oil shocks
+- Follow-up tracking during events
 
----### 3.2 Entry Sniper
+---
 
-Purpose: Identify high-quality trade setups
+### 3.2 Entry Sniper
 
-Analyzes:
+**Purpose:** Identify high-quality trade setups
+
+**Analyzes:**
 - EMA structure (trend alignment)
 - Momentum shifts
 - RSI positioning
 - Support / resistance
 - Intraday structure
 
-Outputs:
+**Outputs:**
 - Top 1–3 trade candidates
 - Entry conditions
 - Ideal setup vs fallback setup
-- “Do nothing” signal if no A+ setups
+- Explicit "no trade" signal when setups are weak
 
-Design goal:
+**Goal:**
 Eliminate low-quality trades and enforce discipline
 
 ---
 
 ### 3.3 Trade Tracker
 
-Purpose: Improve execution and performance
+**Purpose:** Improve execution and long-term performance
 
-Tracks:
+**Tracks:**
 - Trade entries and exits
 - Strategy type (spread, directional, etc.)
 - Profit and loss
 - Execution quality
 
-Future:
+**Future Enhancements:**
 - Performance analytics
 - Strategy breakdown
-- Pattern recognition
+- Behavioral tracking
+- Mistake identification
 
 ---
 
 ### 3.4 Macro Intelligence Layer (Future)
 
-Goal: Evolve beyond manual interpretation
+**Goal:** Move beyond manual interpretation
 
-Planned features:
+**Planned Features:**
 - Pattern recognition across regimes
-- Historical behavior tracking
+- Historical behavior mapping (tickers vs macro states)
 - Adaptive strategy suggestions
 - ML-assisted signal weighting
 
----## 4. System Architecture
+---
 
-Structure:
+## 4. System Architecture
+
+### Current Structure
 
 trading-projects/
 ├── macro/
@@ -109,55 +121,90 @@ trading-projects/
 ├── outputs/
 ├── docs/
 
-Design Principles:
-- Modular architecture
+### Design Principles
+
+- Modular architecture (independent but connected components)
 - Lightweight API usage
 - Terminal-first output
-- Expandable to web/dashboard
+- Mobile-friendly formatting
+- Expandable to web/dashboard interface
 
 ---
 
 ## 5. Output Design
 
-Requirements:
+### Requirements
+
 - Clean, readable formatting
 - Minimal noise
 - Strong signal hierarchy:
   - Timestamp
   - Regime
-  - Drivers
+  - Primary driver
+  - Secondary driver
   - Key levels
-- Visual clarity (spacing, alignment)
+
+### UX Goals
+
+- Fast scanning
+- No clutter
+- Clear directional bias
+- Consistent formatting across tools
 
 ---
 
 ## 6. Automation
 
-Current:
-- Hourly macro updates
+### Current
 
-Planned:
+- Manual or scheduled macro updates
+
+### Planned
+
 - Pre-market report (6:00 AM)
-- Trade scan (6:30 AM)
-- Intraday updates
+- Pre-market trade setup scan (6:30 AM)
+- Intraday macro pulse updates
 - Incident-triggered alerts
+- Notification system (phone + watch)
 
 ---
 
 ## 7. Roadmap
 
-Phase 1:
-- Stabilize Macro Pulse
-- Improve formatting and clarity
+### Phase 1 (Current)
 
-Phase 2:
+- Stabilize Macro Pulse
+- Improve output clarity
+- Define core ticker set
+
+### Phase 2
+
 - Entry Sniper integration
+- Trade candidate system
 - Watchlist refinement
 
-Phase 3:
-- Trade Tracker system
-- Performance logging
+### Phase 3
 
-Phase 4:
+- Trade Tracker implementation
+- Performance logging system
+
+### Phase 4
+
 - Machine learning integration
-- Adaptive strategies
+- Adaptive strategy layer
+- Automated insights
+
+---
+
+## 8. Long-Term Vision
+
+Macro Suite evolves into a **personal trading operating system** that:
+
+- Understands macro regimes in real time
+- Identifies opportunities automatically
+- Adapts strategies based on performance
+- Minimizes emotional decision-making
+- Provides a complete trading feedback loop
+
+End goal:
+A disciplined, data-driven trading system built around clarity, consistency, and edge.

@@ -1,68 +1,89 @@
 #!/usr/bin/env python3
-import yfinance as yf
+# ============================================================
+# MACRO SUITE — Entry Sniper
+# ============================================================
+# Scans the watchlist for high-quality trade setups using
+# EMA structure, RSI, and momentum. Output is ranked:
+#   IDEAL → FALLBACK → NO TRADE
+# Run: python main.py  (sniper runs after macro pulse)
+# ============================================================
+
+from __future__ import annotations
+
 from datetime import datetime
 
-TICKERS = ["GUSH", "XLE", "OXY", "XOM"]
+from config.tickers import SNIPER_SYMBOLS
+from core.formatter import divider
+from macro.regime import classify
+from macro.session import current_session
+from sniper.scanner import Setup, scan
 
 
-def banner():
-    print("\n" + "=" * 60)
-    print(f"MACRO PULSE ENTRY SNIPER | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("=" * 60)
+# ── Regime warning ───────────────────────────────────────────
+
+_REGIME_NOTES = {
+    "RISK OFF": "⚠  RISK OFF — reduce size, prefer shorts or cash",
+    "MIXED":    "~  Mixed environment — be selective, wait for clarity",
+    "RISK ON":  "✓  RISK ON — favorable for long setups",
+}
 
 
-def fetch(symbol):
-    try:
-        data = yf.Ticker(symbol)
-        hist = data.history(period="2d")
+# ── Format a single setup ────────────────────────────────────
 
-        if len(hist) < 2:
-            return None
-
-        prev_close = hist["Close"].iloc[-2]
-        last = hist["Close"].iloc[-1]
-
-        change = last - prev_close
-        pct = (change / prev_close) * 100
-
-        return {
-            "symbol": symbol,
-            "price": last,
-            "change": change,
-            "pct": pct,
-        }
-
-    except Exception as e:
-        print(f"{symbol} error: {e}")
-        return None
+def _format_setup(rank: int, s: Setup) -> str:
+    lines = [
+        f"{rank}. {s.ticker}  —  {s.bias} BIAS  [{s.grade}]",
+        f"   Price: {s.price}  |  RSI: {s.rsi_val}  |  EMA: {s.alignment}",
+        f"   EMA9: {s.e9}  EMA21: {s.e21}  EMA50: {s.e50}",
+        f"   S: {s.support}  R: {s.resistance}",
+        f"   Entry: {s.entry_note}",
+    ]
+    return "\n".join(lines)
 
 
-def main():
-    banner()
+# ── Build terminal output ────────────────────────────────────
 
-    results = []
+def build_output(macro_data: dict | None = None) -> str:
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    session = current_session()
 
-    for t in TICKERS:
-        r = fetch(t)
-        if r:
-            results.append(r)
+    lines: list[str] = []
+    lines.append("ENTRY SNIPER")
+    lines.append(f"{now}  |  {session} Session")
+    lines.append(divider())
 
-    if not results:
-        print("\n❌ No data (all fetches failed)")
-        return
+    # Macro context note (if data passed in)
+    if macro_data:
+        regime = classify(macro_data)
+        lines.append(_REGIME_NOTES.get(regime, regime))
+        lines.append("")
 
-    print("\n--- OIL SNIPER ---\n")
+    print("Scanning watchlist...", flush=True)
+    setups = scan(SNIPER_SYMBOLS)
 
-    for r in results:
-        print(
-            f"{r['symbol']}: "
-            f"{r['price']:.2f} | "
-            f"{r['change']:+.2f} | "
-            f"{r['pct']:+.2f}%"
-        )
+    tradeable = [s for s in setups if s.grade != "NO TRADE"]
+    no_trade  = [s for s in setups if s.grade == "NO TRADE"]
 
-    print("\n✅ Data stable (yfinance)\n")
+    # Top setups
+    if tradeable:
+        lines.append(f"TOP SETUPS ({len(tradeable)})")
+        lines.append("")
+        for i, s in enumerate(tradeable[:3], 1):
+            lines.append(_format_setup(i, s))
+            lines.append("")
+    else:
+        lines.append("NO SETUPS — conditions unfavorable across watchlist")
+        lines.append("")
+
+    # No-trade list
+    if no_trade:
+        tickers = ", ".join(s.ticker for s in no_trade)
+        lines.append(f"NO TRADE: {tickers}")
+
+    lines.append(divider())
+    return "\n".join(lines)
 
 
-if __name__ == "__main__":
-    main()
+def run(macro_data: dict | None = None) -> None:
+    output = build_output(macro_data)
+    print(output)

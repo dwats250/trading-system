@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Macro Pulse</title>
+    <style>
+        :root {
+            --bg: #081225;
+            --panel: #0f1b33;
+            --panel-2: #14213d;
+            --border: #213455;
+            --text: #e8eefc;
+            --muted: #9fb2d4;
+            --green: #22c55e;
+            --red: #ef4444;
+            --yellow: #f59e0b;
+            --blue: #60a5fa;
+            --incident-bg: rgba(127, 29, 29, 0.95);
+            --incident-border: #b91c1c;
+            --shadow: 0 10px 30px rgba(0,0,0,0.28);
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0; padding: 18px;
+            font-family: Arial, Helvetica, sans-serif;
+            background: radial-gradient(circle at top left, rgba(37,99,235,0.12), transparent 32%),
+                        linear-gradient(180deg, #081225 0%, #07101f 100%);
+            color: var(--text);
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .hero {
+            background: linear-gradient(180deg, rgba(19,34,63,0.98), rgba(12,22,42,0.98));
+            border: 1px solid var(--border); border-radius: 18px;
+            padding: 18px; box-shadow: var(--shadow); margin-bottom: 16px;
+        }
+        .hero-top {
+            display: flex; justify-content: space-between;
+            align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 14px;
+        }
+        .title-block h1 { margin: 0 0 6px 0; font-size: 1.7rem; line-height: 1.15; }
+        .subtitle { color: var(--muted); font-size: 0.95rem; }
+        .timestamp { color: var(--muted); font-size: 0.92rem; white-space: nowrap; }
+        .pill-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+        .pill {
+            background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.25);
+            color: #dbeafe; padding: 7px 10px; border-radius: 999px; font-size: 0.88rem;
+        }
+        .pill strong { color: white; }
+        .summary-box {
+            background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+            border-radius: 14px; padding: 14px;
+        }
+        .summary-title {
+            color: var(--muted); font-size: 0.82rem;
+            text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;
+        }
+        .summary-text { font-size: 1rem; line-height: 1.45; }
+        .incident-banner {
+            background: var(--incident-bg); border: 1px solid var(--incident-border);
+            border-radius: 14px; padding: 14px; margin-bottom: 16px; box-shadow: var(--shadow);
+        }
+        .incident-title {
+            font-size: 0.82rem; text-transform: uppercase;
+            letter-spacing: 0.08em; opacity: 0.9; margin-bottom: 6px;
+        }
+        .incident-text { font-size: 1rem; font-weight: bold; }
+        .section { margin-bottom: 18px; }
+        .section-title { font-size: 1.05rem; font-weight: bold; margin: 0 0 10px 0; color: #f8fbff; }
+        .grid { display: grid; gap: 10px; }
+        .macro-grid { grid-template-columns: repeat(auto-fit, minmax(125px, 1fr)); }
+        .card {
+            background: linear-gradient(180deg, rgba(20,33,61,0.98), rgba(14,24,44,0.98));
+            border: 1px solid var(--border); border-radius: 16px;
+            padding: 14px; box-shadow: var(--shadow);
+        }
+        .macro-card { min-height: 108px; display: flex; flex-direction: column; justify-content: space-between; }
+        .card-label { color: var(--muted); font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 8px; }
+        .card-value { font-size: 1.25rem; font-weight: bold; line-height: 1.15; }
+        .card-change { font-size: 0.96rem; font-weight: bold; margin-top: 8px; }
+        .move-up   { color: var(--green); }
+        .move-down { color: var(--red); }
+        .move-flat { color: var(--yellow); }
+        .footer { color: var(--muted); text-align: center; font-size: 0.86rem; padding: 10px 0 2px; }
+        @media (max-width: 600px) {
+            body { padding: 12px; }
+            .hero { padding: 14px; border-radius: 16px; }
+            .title-block h1 { font-size: 1.45rem; }
+            .card-value { font-size: 1.1rem; }
+        }
+</style>
+</head>
+<body>
+    <div class="container">
+        <section class="hero">
+            <div class="hero-top">
+                <div class="title-block">
+                    <h1>Macro Pulse</h1>
+                    <div class="subtitle">Macro regime dashboard</div>
+                </div>
+                <div class="timestamp">2026-03-29 01:09</div>
+            </div>
+            <div class="pill-row">
+                <div class="pill"><strong>Session:</strong> London</div>
+                <div class="pill"><strong>Regime:</strong> RISK OFF</div>
+                <div class="pill"><strong>Primary:</strong> Vol spike (+13.16% VIX)</div>
+                <div class="pill"><strong>Secondary:</strong> Oil bid (+5.46% WTI)</div>
+            </div>
+            <div class="summary-box">
+                <div class="summary-title">Cross-Asset Read</div>
+                <div class="summary-text">Vol spike driving broad risk-off — defensive posture</div>
+            </div>
+        </section>
+
+        
+        <div class="incident-banner">
+            <div class="incident-title">Active Incidents</div>
+            <div class='incident-text'>⚠ Oil shock up: WTI +5.46%</div>
+        </div>
+
+        <section class="section">
+            <h2 class="section-title">Macro</h2>
+            <div class="grid macro-grid">
+                
+        <div class="card macro-card">
+            <div class="card-label">10Y</div>
+            <div class="card-value">4.44</div>
+            <div class="card-change move-up">↑ +0.54%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">DXY</div>
+            <div class="card-value">100.19</div>
+            <div class="card-change move-up">↑ +0.29%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">UJ</div>
+            <div class="card-value">160.29</div>
+            <div class="card-change move-up">↑ +0.57%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">VIX</div>
+            <div class="card-value">31.05</div>
+            <div class="card-change move-up">↑ +13.16%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">WTI</div>
+            <div class="card-value">99.64</div>
+            <div class="card-change move-up">↑ +5.46%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">BRT</div>
+            <div class="card-value">105.32</div>
+            <div class="card-change move-down">↓ -2.49%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">SPY</div>
+            <div class="card-value">634.09</div>
+            <div class="card-change move-down">↓ -1.71%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">QQQ</div>
+            <div class="card-value">562.58</div>
+            <div class="card-change move-down">↓ -1.95%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">NDX</div>
+            <div class="card-value">23,133</div>
+            <div class="card-change move-down">↓ -1.93%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">XAU</div>
+            <div class="card-value">4,524.30</div>
+            <div class="card-change move-up">↑ +3.40%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">XAG</div>
+            <div class="card-value">69.80</div>
+            <div class="card-change move-up">↑ +3.14%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">HG</div>
+            <div class="card-value">5.50</div>
+            <div class="card-change move-up">↑ +0.89%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">HYG</div>
+            <div class="card-value">78.72</div>
+            <div class="card-change move-down">↓ -0.25%</div>
+        </div>
+        <div class="card macro-card">
+            <div class="card-label">BTC</div>
+            <div class="card-value">66,638</div>
+            <div class="card-change move-up">↑ +0.48%</div>
+        </div>
+            </div>
+        </section>
+
+        <div class="footer">Macro Suite — Macro Pulse</div>
+    </div>
+</body>
+</html>
