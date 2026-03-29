@@ -14,16 +14,26 @@ python main.py
 
 ## Phone Setup (Termux — first time only)
 
+**Step 1 — Clone and install:**
 ```bash
 git clone https://github.com/dwats250/trading-system.git
 cd trading-system
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+```
+
+**Step 2 — Set up the `macro` shortcut:**
+```bash
 echo 'alias macro="cd ~/trading-system && git pull && source .venv/bin/activate && python main.py"' >> ~/.bash_profile && source ~/.bash_profile
 ```
 
-Then just type `macro` to update and run.
+**Step 3 — Run it:**
+```bash
+macro
+```
+
+After setup, just type `macro` every time to pull latest and run.
 
 ---
 
