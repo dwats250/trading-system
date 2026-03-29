@@ -101,7 +101,7 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea]]:
     primary, secondary = drivers(macro_data)
     incidents = detect(macro_data)
     playbook  = generate(regime, primary, secondary)
-    focus     = route(primary, secondary)
+    focus     = route(primary, secondary, regime)
 
     # Use focus primary tickers if available, else full sniper list
     focus_tickers = {t: t for t in focus["primary"]} if focus["primary"] else SNIPER_SYMBOLS

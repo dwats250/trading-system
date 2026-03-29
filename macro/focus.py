@@ -1,99 +1,123 @@
 # ============================================================
 # MACRO SUITE — Focus Router
 # ============================================================
-# Narrows the trading universe based on playbook guidance.
-# Rather than scanning 40 tickers, we focus on the 3-5 most
-# relevant given the current macro environment.
+# Routes attention to the correct group based on regime.
+# Mirrors the approved trading universe routing table exactly:
 #
-# Core reasoning: attention is a limited resource. The focus
-# router prevents "scanning everything and trading nothing."
+#   Oil-driven      → OIL_CORE, OIL_SUPPLY
+#   Metals-driven   → METALS
+#   Dollar move     → DOLLAR
+#   Risk-on         → EQUITIES
+#   Mixed / unclear → Reduce scope
+#
+# Core reasoning: scan ONLY the active group. Scanning
+# everything and trading nothing is the enemy of edge.
 # ============================================================
 
 from __future__ import annotations
 
-from config.tickers import TICKERS
+from config.tickers import DOLLAR, EQUITIES, METALS, OIL_CORE, OIL_SUPPLY
 
 
-# ── Driver → ticker group mapping ────────────────────────────
-# Maps driver keywords to groups in TICKERS config.
-# Primary = scan first. Secondary = scan if no A setups in primary.
+# ── Sub-regime detection ──────────────────────────────────────
+# Translates the raw regime + primary driver into a specific
+# sub-regime that maps directly to a ticker group.
 
-_DRIVER_FOCUS_MAP: dict[str, dict[str, list[str]]] = {
-    "oil bid":          {"primary": ["oil_core", "oil_beta"], "secondary": ["energy_supply"]},
-    "oil selling":      {"primary": ["oil_core"],             "secondary": []},
-    "brent bid":        {"primary": ["oil_core", "oil_beta"], "secondary": []},
-    "dollar strength":  {"primary": ["fx"],                   "secondary": []},
-    "dollar weakness":  {"primary": ["metals"],               "secondary": ["fx"]},
-    "gold bid":         {"primary": ["metals"],               "secondary": []},
-    "gold selling":     {"primary": [],                       "secondary": ["metals"]},
-    "equity rally":     {"primary": ["equities"],             "secondary": []},
-    "equity selloff":   {"primary": ["equities"],             "secondary": []},
-    "vol spike":        {"primary": [],                       "secondary": []},   # wait
-    "vol compression":  {"primary": ["equities"],             "secondary": ["metals"]},
-    "rates rising":     {"primary": ["equities"],             "secondary": []},
-    "rates falling":    {"primary": ["equities"],             "secondary": ["metals"]},
-    "credit bid":       {"primary": ["equities"],             "secondary": []},
-    "credit selling":   {"primary": [],                       "secondary": []},
+def detect_sub_regime(regime: str, primary_driver: str, secondary_driver: str) -> str:
+    """
+    Returns one of:
+      OIL-DRIVEN | METALS-DRIVEN | DOLLAR-MOVE | RISK-ON | MIXED
+    """
+    p = primary_driver.lower()
+    s = secondary_driver.lower()
+
+    if any(kw in p for kw in ["oil bid", "brent bid", "oil shock"]):
+        return "OIL-DRIVEN"
+    if any(kw in p for kw in ["gold bid", "gold", "silver"]):
+        return "METALS-DRIVEN"
+    if any(kw in p for kw in ["dollar strength", "dollar breakout"]):
+        return "DOLLAR-MOVE"
+    if regime == "RISK ON":
+        return "RISK-ON"
+
+    # Check secondary if primary wasn't definitive
+    if any(kw in s for kw in ["oil bid", "brent bid"]):
+        return "OIL-DRIVEN"
+    if any(kw in s for kw in ["gold bid"]):
+        return "METALS-DRIVEN"
+
+    return "MIXED"
+
+
+# ── Routing table ─────────────────────────────────────────────
+
+_ROUTING: dict[str, dict] = {
+    "OIL-DRIVEN": {
+        "primary":   OIL_CORE,
+        "secondary": OIL_SUPPLY,
+        "warning":   "",
+    },
+    "METALS-DRIVEN": {
+        "primary":   METALS,
+        "secondary": [],
+        "warning":   "",
+    },
+    "DOLLAR-MOVE": {
+        "primary":   DOLLAR,
+        "secondary": [],
+        "warning":   "Dollar group has thin options — monitor, not primary trade",
+    },
+    "RISK-ON": {
+        "primary":   EQUITIES,
+        "secondary": OIL_CORE[:3],  # SPY/QQQ/IWM + top oil names
+        "warning":   "",
+    },
+    "MIXED": {
+        "primary":   [],
+        "secondary": [],
+        "warning":   "No clear regime — reduce scope, wait for clarity",
+    },
 }
 
-# Default focus when no driver match: scan equities + oil
-_DEFAULT_FOCUS = {"primary": ["equities", "oil_core"], "secondary": ["metals"]}
 
-
-def _match(driver_str: str) -> dict:
-    dl = driver_str.lower()
-    for key, mapping in _DRIVER_FOCUS_MAP.items():
-        if key in dl:
-            return mapping
-    return _DEFAULT_FOCUS
-
-
-def _group_to_tickers(groups: list[str]) -> list[str]:
-    result = []
-    for group in groups:
-        result.extend(TICKERS.get(group, []))
-    return list(dict.fromkeys(result))  # deduplicate, preserve order
-
-
-def route(primary_driver: str, secondary_driver: str) -> dict:
+def route(primary_driver: str, secondary_driver: str, regime: str = "MIXED") -> dict:
     """
-    Return focused ticker lists based on the dominant drivers.
+    Return focused ticker lists based on sub-regime.
 
     Returns:
     {
-        "primary":   list[str],   # scan these first
-        "secondary": list[str],   # scan if no A setups in primary
-        "avoid":     list[str],   # labels to skip
+        "sub_regime": str,
+        "primary":    list[str],
+        "secondary":  list[str],
+        "warning":    str,
     }
     """
-    p_map = _match(primary_driver)
-    s_map = _match(secondary_driver)
+    sub_regime = detect_sub_regime(regime, primary_driver, secondary_driver)
+    mapping = _ROUTING.get(sub_regime, _ROUTING["MIXED"])
 
-    primary   = _group_to_tickers(p_map.get("primary", []))
-    secondary = _group_to_tickers(
-        [g for g in s_map.get("primary", []) if g not in p_map.get("primary", [])]
-    )
-
-    # Vol spike = don't trade anything
+    # VIX spike adds a warning on top of whatever group we're in
+    vol_warning = ""
     if "vol spike" in primary_driver.lower():
-        return {"primary": [], "secondary": [], "avoid": ["everything — wait for VIX to settle"]}
+        vol_warning = "⚠ VIX elevated — reduced size only, wait for vol to contract"
+
+    warning = vol_warning or mapping["warning"]
 
     return {
-        "primary":   primary[:6],    # cap at 6 primary tickers
-        "secondary": secondary[:4],
-        "avoid":     [],
+        "sub_regime": sub_regime,
+        "primary":    mapping["primary"],
+        "secondary":  mapping["secondary"],
+        "warning":    warning,
     }
 
 
 def format_focus(focus: dict) -> list[str]:
-    lines = ["FOCUS"]
+    lines = [f"FOCUS  [{focus['sub_regime']}]"]
     if not focus["primary"] and not focus["secondary"]:
         lines.append("  No clear focus — stay in cash")
-        return lines
     if focus["primary"]:
         lines.append(f"  Primary:   {', '.join(focus['primary'])}")
     if focus["secondary"]:
         lines.append(f"  Secondary: {', '.join(focus['secondary'])}")
-    if focus["avoid"]:
-        lines.append(f"  Avoid:     {', '.join(focus['avoid'])}")
+    if focus["warning"]:
+        lines.append(f"  {focus['warning']}")
     return lines
