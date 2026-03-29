@@ -244,6 +244,8 @@ Clearly shows where to trade.
 
 ## 4.5 TOP SETUPS (PRIORITY SECTION)
 
+**Guardrail requirement:** A setup may only appear in Top Setups if it has passed all execution-level hard guardrails (R:R ≥ 2:1, chart grade A, regime-aligned, options liquid, structure clear). Setups that fail any guardrail must not be ranked — they are either demoted to a watchlist section or excluded entirely. This rule applies to every output surface that ranks or presents setups, including the pre-market report.
+
 Format:
 
 ---

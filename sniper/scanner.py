@@ -90,17 +90,22 @@ def scan(tickers: dict[str, str]) -> list[Setup]:
         e21     = round(float(row.get("EMA_21", row["Close"])), 2)
         e50     = round(float(row.get("EMA_50", row["Close"])), 2)
         rsi_val = round(float(row.get("RSI_14", 50)), 1)
+        # ATRr_14 is the column name produced by pandas_ta atr(length=14)
+        atr     = round(float(row.get("ATRr_14", row.get("ATR_14", price * 0.02))), 4)
 
         alignment  = ema_alignment(price, e9, e21, e50)
         support, resistance = support_resistance(df)
         last_bullish = float(row["Close"]) > float(row["Open"])
 
-        score      = setup_score(price, e9, e21, e50, rsi_val, last_bullish)
-        grade      = chart_grade(score)
-        setup_type = detect_setup_type(price, e9, e21, e50, rsi_val, resistance)
-        conf       = confidence_score(score, setup_type, alignment)
+        # bias resolved first — required for bias-aware setup_score (SHORT mirror scoring)
         bias       = _bias(alignment, rsi_val)
-        inv        = invalidation_level(bias, support, e21, e50)
+        score      = setup_score(price, e9, e21, e50, rsi_val, last_bullish, bias)
+        grade      = chart_grade(score)
+        # support passed to detect_setup_type for SHORT breakdown detection
+        setup_type = detect_setup_type(price, e9, e21, e50, rsi_val, resistance, support)
+        conf       = confidence_score(score, setup_type, alignment)
+        # setup_type resolved before invalidation — required for EMA anchor selection
+        inv        = invalidation_level(bias, price, e9, e21, e50, setup_type, atr)
         rr         = compute_rr(bias, price, support, resistance, inv)
         note       = _entry_note(bias, price, e9, e21, resistance, support, setup_type)
 

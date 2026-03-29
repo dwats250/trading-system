@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Optional
 from urllib.parse import quote
 
@@ -50,8 +51,9 @@ def fetch_symbol(symbol: str) -> Optional[dict]:
         if price is None or prev_close in (None, 0):
             return None
 
-        pct = ((price - prev_close) / prev_close) * 100.0
-        return {"price": float(price), "pct": float(pct)}
+        pct    = ((price - prev_close) / prev_close) * 100.0
+        change = price - prev_close
+        return {"price": float(price), "pct": float(pct), "change": float(change)}
 
     except Exception:
         return None
@@ -64,6 +66,38 @@ def fetch_label(symbols: list[str]) -> Optional[dict]:
         if data is not None:
             return data
     return None
+
+
+def fetch_ohlcv(symbol: str, range_: str = "3mo") -> list[dict]:
+    """Fetch daily OHLCV bars. Returns [{date, open, high, low, close}]."""
+    try:
+        url = (
+            f"https://query1.finance.yahoo.com/v8/finance/chart/"
+            f"{quote(symbol, safe='')}?range={range_}&interval=1d"
+        )
+        resp = requests.get(url, headers=_HEADERS, timeout=FETCH_TIMEOUT)
+        resp.raise_for_status()
+        result = resp.json()["chart"]["result"][0]
+        timestamps = result.get("timestamp", [])
+        q = result["indicators"]["quote"][0]
+        opens  = q.get("open",  [])
+        highs  = q.get("high",  [])
+        lows   = q.get("low",   [])
+        closes = q.get("close", [])
+        bars = []
+        for i, ts in enumerate(timestamps):
+            if i >= len(closes) or closes[i] is None:
+                continue
+            bars.append({
+                "date":  datetime.fromtimestamp(ts).strftime("%m/%d"),
+                "open":  opens[i],
+                "high":  highs[i],
+                "low":   lows[i],
+                "close": closes[i],
+            })
+        return bars
+    except Exception:
+        return []
 
 
 def fetch_all(symbol_map: dict[str, list[str]]) -> dict[str, Optional[dict]]:

@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from core.formatter import arrow, fmt_pct, fmt_price
@@ -38,6 +39,124 @@ def _composite_grade_cls(grade: str) -> str:
     return {"A+": "grade-aplus", "A": "grade-a", "B": "grade-b"}.get(grade, "grade-c")
 
 
+def _compute_ema(closes: list[float], period: int) -> list[float]:
+    k = 2.0 / (period + 1)
+    ema = [closes[0]]
+    for c in closes[1:]:
+        ema.append(c * k + ema[-1] * (1 - k))
+    return [round(v, 2) for v in ema]
+
+
+def _compute_rsi(closes: list[float], period: int = 14) -> list[float | None]:
+    result: list[float | None] = [None] * len(closes)
+    if len(closes) < period + 1:
+        return result
+    deltas = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains  = [max(d, 0.0) for d in deltas]
+    losses = [max(-d, 0.0) for d in deltas]
+    avg_g  = sum(gains[:period]) / period
+    avg_l  = sum(losses[:period]) / period
+    def _rsi(ag: float, al: float) -> float:
+        return 100.0 if al == 0 else round(100 - 100 / (1 + ag / al), 1)
+    result[period] = _rsi(avg_g, avg_l)
+    for i in range(period, len(deltas)):
+        avg_g = (avg_g * (period - 1) + gains[i])  / period
+        avg_l = (avg_l * (period - 1) + losses[i]) / period
+        result[i + 1] = _rsi(avg_g, avg_l)
+    return result
+
+
+def _chart_html(ticker: str, bars: list[dict], setup) -> str:
+    if not bars or len(bars) < 10:
+        return ""
+    closes = [b["close"] for b in bars]
+    labels = [b["date"]  for b in bars]
+    ema9   = _compute_ema(closes, 9)
+    ema21  = _compute_ema(closes, 21)
+    ema50  = _compute_ema(closes, 50)
+    rsi    = _compute_rsi(closes)
+    cid    = ticker.replace("^", "").replace("=", "").replace("-", "").replace(".", "")
+    annotations = {
+        "support": {
+            "type": "line", "yMin": setup.support, "yMax": setup.support,
+            "borderColor": "rgba(34,197,94,0.8)", "borderWidth": 1.5, "borderDash": [5, 4],
+            "label": {"display": True, "content": f"S {setup.support:.2f}",
+                      "position": "start", "backgroundColor": "transparent",
+                      "color": "#86efac", "font": {"size": 10}},
+        },
+        "resistance": {
+            "type": "line", "yMin": setup.resistance, "yMax": setup.resistance,
+            "borderColor": "rgba(239,68,68,0.8)", "borderWidth": 1.5, "borderDash": [5, 4],
+            "label": {"display": True, "content": f"R {setup.resistance:.2f}",
+                      "position": "start", "backgroundColor": "transparent",
+                      "color": "#fca5a5", "font": {"size": 10}},
+        },
+        "invalidation": {
+            "type": "line", "yMin": setup.invalidation, "yMax": setup.invalidation,
+            "borderColor": "rgba(239,68,68,0.5)", "borderWidth": 1, "borderDash": [3, 3],
+            "label": {"display": True, "content": f"INV {setup.invalidation:.2f}",
+                      "position": "end", "backgroundColor": "transparent",
+                      "color": "#fca5a5", "font": {"size": 9}},
+        },
+    }
+    return f"""
+    <div class="chart-wrap">
+        <div style="position:relative;height:200px"><canvas id="pc-{cid}"></canvas></div>
+        <div style="position:relative;height:70px;margin-top:3px"><canvas id="rsi-{cid}"></canvas></div>
+    </div>
+    <script>
+    (function(){{
+        var L={json.dumps(labels)}, C={json.dumps(closes)},
+            E9={json.dumps(ema9)}, E21={json.dumps(ema21)}, E50={json.dumps(ema50)},
+            RSI={json.dumps(rsi)};
+        var grid={{'color':'rgba(26,51,86,0.5)'}}, tick={{'color':'#7a9cc4','font':{{'size':9}}}};
+        new Chart(document.getElementById('pc-{cid}'),{{
+            type:'line',
+            data:{{labels:L,datasets:[
+                {{label:'Close',data:C,borderColor:'#60a5fa',borderWidth:1.5,fill:true,
+                  backgroundColor:'rgba(96,165,250,0.06)',pointRadius:0,tension:0.2}},
+                {{label:'EMA9', data:E9, borderColor:'#22c55e',borderWidth:1.2,fill:false,pointRadius:0}},
+                {{label:'EMA21',data:E21,borderColor:'#f59e0b',borderWidth:1.2,fill:false,pointRadius:0}},
+                {{label:'EMA50',data:E50,borderColor:'#a78bfa',borderWidth:1.5,fill:false,pointRadius:0}},
+            ]}},
+            options:{{responsive:true,maintainAspectRatio:false,animation:false,
+                plugins:{{
+                    legend:{{display:true,position:'top',labels:{{boxWidth:10,font:{{size:10}},color:'#7a9cc4'}}}},
+                    annotation:{{annotations:{json.dumps(annotations)}}},
+                    tooltip:{{mode:'index',intersect:false}}
+                }},
+                scales:{{
+                    x:{{grid:grid,ticks:{{...tick,maxTicksLimit:10}}}},
+                    y:{{grid:grid,ticks:tick,position:'right'}}
+                }}
+            }}
+        }});
+        new Chart(document.getElementById('rsi-{cid}'),{{
+            type:'line',
+            data:{{labels:L,datasets:[
+                {{label:'RSI',data:RSI,borderColor:'#f59e0b',borderWidth:1.2,fill:false,pointRadius:0,tension:0.2}}
+            ]}},
+            options:{{responsive:true,maintainAspectRatio:false,animation:false,
+                plugins:{{
+                    legend:{{display:false}},
+                    annotation:{{annotations:{{
+                        ob:{{type:'line',yMin:70,yMax:70,borderColor:'rgba(239,68,68,0.4)',borderWidth:1,borderDash:[3,3]}},
+                        os:{{type:'line',yMin:30,yMax:30,borderColor:'rgba(34,197,94,0.4)',borderWidth:1,borderDash:[3,3]}},
+                        mid:{{type:'line',yMin:50,yMax:50,borderColor:'rgba(100,100,100,0.3)',borderWidth:1}}
+                    }}}},
+                    tooltip:{{mode:'index',intersect:false}}
+                }},
+                scales:{{
+                    x:{{display:false}},
+                    y:{{min:0,max:100,grid:{{color:'rgba(26,51,86,0.3)'}},
+                       ticks:{{...tick,stepSize:30}},position:'right'}}
+                }}
+            }}
+        }});
+    }})();
+    </script>"""
+
+
 def _rank_header(rank: int, idea: TradeIdea) -> str:
     icons = {1: "🥇", 2: "🟡", 3: "⚪"}
     grade = idea.composite_grade
@@ -50,7 +169,7 @@ def _rank_header(rank: int, idea: TradeIdea) -> str:
     )
 
 
-def _idea_card(idea: TradeIdea) -> str:
+def _idea_card(idea: TradeIdea, bars: list | None = None) -> str:
     s    = idea.setup
     opts = idea.options
     is_watch = idea.composite_grade == "B"
@@ -142,31 +261,70 @@ def _idea_card(idea: TradeIdea) -> str:
         </div>
 
         {opts_html}
+        {_chart_html(s.ticker, bars or [], s)}
     </div>"""
+
+
+def _primary_disqualifier(reasons: list[str]) -> str:
+    """Single most important failure reason for trader-facing display."""
+    checks = [
+        ("regime",         "Conflicts with current macro regime"),
+        ("R:R",            "R:R below 2:1 — risk not justified"),
+        ("Chart grade",    "Chart not A-grade yet"),
+        ("No clear chart", "No clear setup structure"),
+        ("liquidity",      "Options liquidity insufficient"),
+    ]
+    for keyword, label in checks:
+        for r in reasons:
+            if keyword.lower() in r.lower():
+                return label
+    return reasons[0] if reasons else "Failed guardrails"
 
 
 def _rejection_section(rejections: list[Rejection]) -> str:
     if not rejections:
         return ""
-    rows = ""
-    for r in rejections:
-        reasons_html = "".join(f"<li>{reason}</li>" for reason in r.reasons)
-        rows += f"""
-        <div class="reject-row">
-            <div class="reject-header">
-                <span class="reject-ticker">{r.ticker}</span>
-                <span class="reject-grade">Chart {r.chart_grade}</span>
-                <span class="score-badge score-c">{r.score}/100</span>
+
+    # Split: watchlist = chart A/B with identifiable structure; weak = everything else
+    watchlist = [r for r in rejections
+                 if r.chart_grade in ("A", "B")
+                 and not any("No clear chart" in x for x in r.reasons)]
+    weak      = [r for r in rejections if r not in watchlist]
+
+    html = ""
+
+    if watchlist:
+        rows = ""
+        for r in watchlist:
+            disqualifier = _primary_disqualifier(r.reasons)
+            rows += f"""
+            <div class="wl-row">
+                <div class="wl-header">
+                    <span class="reject-ticker">{r.ticker}</span>
+                    <span class="reject-grade">Chart {r.chart_grade}</span>
+                    <span class="score-badge score-b">{r.score}/100</span>
+                </div>
+                <div class="wl-blocker">Why not trading: {disqualifier}</div>
+            </div>"""
+        html += f"""
+        <div class="rejection-section">
+            <div class="section-title">Watchlist Setups — Good Structure, Not Trade-Ready</div>
+            <div class="section-subtitle">Chart structure is identifiable but at least one guardrail blocks execution. Monitor only.</div>
+            <div class="card wl-card">
+                {rows}
             </div>
-            <ul class="reject-reasons">{reasons_html}</ul>
         </div>"""
-    return f"""
-    <div class="rejection-section">
-        <div class="section-title">Rejected Setups</div>
-        <div class="card">
-            {rows}
-        </div>
-    </div>"""
+
+    if weak:
+        tickers = "  ·  ".join(
+            f"{r.ticker} (Grade {r.chart_grade})" for r in weak
+        )
+        html += f"""
+        <div class="off-radar-sniper">
+            <span class="off-radar-label">Not on radar</span> {tickers}
+        </div>"""
+
+    return html
 
 
 def _macro_tags(data_map: dict) -> str:
@@ -346,6 +504,19 @@ _STYLE = """
     .reject-grade { color: var(--muted); font-size: 0.8rem; }
     .reject-reasons { list-style: disc; padding-left: 20px; color: var(--muted); font-size: 0.82rem; }
     .reject-reasons li { margin: 2px 0; }
+    /* Watchlist tier — distinct from validated trades */
+    .section-subtitle { color: var(--muted); font-size: 0.8rem; font-style: italic; margin-bottom: 10px; }
+    .wl-card { border-color: rgba(75,85,99,0.3); background: rgba(15,20,30,0.5); }
+    .wl-row { padding: 9px 0; border-bottom: 1px solid rgba(30,58,95,0.3); opacity: 0.8; }
+    .wl-row:last-child { border-bottom: none; }
+    .wl-header { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+    .wl-blocker { font-size: 0.8rem; color: #6b7280; }
+    .wl-blocker::before { content: "⛔ "; }
+    /* Off-radar — minimal, no card */
+    .off-radar-sniper { margin-top: 8px; margin-bottom: 16px;
+                        font-size: 0.75rem; color: #4b5563; }
+    .off-radar-label { font-weight: 700; color: #6b7280; text-transform: uppercase;
+                       font-size: 0.68rem; letter-spacing: 0.08em; margin-right: 6px; }
     .liq-badge { padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
     .liq-high { background: rgba(34,197,94,0.15);  color: #86efac; }
     .liq-med  { background: rgba(245,158,11,0.15); color: #fde68a; }
@@ -373,6 +544,7 @@ _STYLE = """
     .dn   { color: var(--red);   }
     .flat { color: var(--yellow);}
 
+    .chart-wrap { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
     .footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 20px 0 4px; }
 
     @media (max-width: 640px) {
@@ -390,6 +562,7 @@ def build_options_html(
     focus: dict,
     incidents: list[str],
     rejections: list[Rejection] | None = None,
+    chart_data: dict | None = None,
 ) -> str:
     now = datetime.now().strftime("%A, %B %d %Y  —  %I:%M %p PST")
     regime   = classify(data_map)
@@ -432,10 +605,11 @@ def build_options_html(
     focus_secondary = " ".join(f'<span class="focus-ticker">{t}</span>' for t in focus["secondary"]) or "—"
 
     # Ideas
+    cd = chart_data or {}
     if ideas:
-        ideas_html = "".join(_idea_card(i) for i in ideas[:3])
+        ideas_html = "".join(_idea_card(i, cd.get(i.setup.ticker)) for i in ideas[:3])
     else:
-        ideas_html = '<div class="no-setups">No setups cleared guardrails — WAIT</div>'
+        ideas_html = '<div class="no-setups">No validated trades today — stay flat or wait for better conditions</div>'
 
     # Rejection section
     rejections_html = _rejection_section(rejections or [])
@@ -451,6 +625,8 @@ def build_options_html(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Options Sniper — {datetime.now().strftime('%b %d')}</title>
     <style>{_STYLE}</style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
 </head>
 <body>
 <div class="page">
@@ -498,7 +674,7 @@ def build_options_html(
     </div>
 
     <div class="ideas-section">
-        <div class="ideas-title">Top Setups</div>
+        <div class="ideas-title">Validated Top Trades</div>
         {ideas_html}
     </div>
 
@@ -541,7 +717,10 @@ def save(path: str = "options_sniper.html", data_map: dict | None = None,
         focus     = focus     or route(primary, secondary, regime)
         incidents = incidents or detect(data_map)
 
-    html = build_options_html(data_map, ideas, playbook, focus, incidents, rejections)
+    from core.fetcher import fetch_ohlcv
+    chart_data = {i.setup.ticker: fetch_ohlcv(i.setup.ticker) for i in ideas[:3]}
+
+    html = build_options_html(data_map, ideas, playbook, focus, incidents, rejections, chart_data)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"HTML saved → {path}")

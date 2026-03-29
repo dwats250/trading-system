@@ -9,7 +9,10 @@ from datetime import datetime
 from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
-from reports.calendar import get_events
+from reports.calendar import get_events, get_month_events
+
+
+# ── Helpers ──────────────────────────────────────────────────
 
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -18,6 +21,13 @@ def _cls(pct: float) -> str:
     if pct > 0: return "up"
     if pct < 0: return "dn"
     return "flat"
+
+
+def _fmt_change(change: float) -> str:
+    sign = "+" if change >= 0 else ""
+    if abs(change) >= 1000:
+        return f"{sign}{change:,.0f}"
+    return f"{sign}{change:.2f}"
 
 
 def _regime_cls(regime: str) -> str:
@@ -65,10 +75,13 @@ def _macro_rows(data_map: dict) -> str:
         if not d:
             continue
         cls = _cls(d["pct"])
+        change     = d.get("change")
+        change_html = f'<span class="row-change-dollar {cls}">{_fmt_change(change)}</span>' if change is not None else ""
         rows.append(f"""
         <tr>
             <td class="row-label">{name}</td>
             <td class="row-price">{fmt_price(d['price'])}</td>
+            <td class="row-dollar">{change_html}</td>
             <td class="row-change {cls}">{arrow(d['pct'])} {fmt_pct(d['pct'])}</td>
         </tr>""")
     return "".join(rows)
@@ -80,50 +93,155 @@ def _calendar_rows(events: list[dict]) -> str:
     rows = []
     for e in events:
         impact_cls = "impact-high" if e["impact"] == "HIGH" else "impact-med"
+        url = e.get("url", "#")
         rows.append(f"""
         <tr>
             <td class="ev-time">{e['time']} UTC</td>
             <td><span class="impact-badge {impact_cls}">{e['impact']}</span></td>
-            <td class="ev-name">{e['event']}</td>
+            <td class="ev-name"><a href="{url}" target="_blank" rel="noopener">{e['event']}</a></td>
             <td class="ev-est">{e['consensus']}</td>
         </tr>""")
     return "".join(rows)
 
 
-def _setup_cards(setups: list) -> str:
-    tradeable = [s for s in setups if s.grade != "NO TRADE"]
-    no_trade  = [s for s in setups if s.grade == "NO TRADE"]
+def _primary_disqualifier(reasons: list[str]) -> str:
+    """Single most important failure reason for trader-facing display."""
+    checks = [
+        ("regime",          "Conflicts with current macro regime"),
+        ("R:R",             "R:R below 2:1 — risk not justified"),
+        ("Chart grade",     "Chart not A-grade yet"),
+        ("No clear chart",  "No clear setup structure"),
+        ("liquidity",       "Options liquidity insufficient"),
+    ]
+    for keyword, label in checks:
+        for r in reasons:
+            if keyword.lower() in r.lower():
+                return label
+    return reasons[0] if reasons else "Failed guardrails"
 
-    if not tradeable:
-        return '<div class="no-setups">No clean setups — stay flat</div>'
 
-    cards = []
-    for s in tradeable[:3]:
-        grade_cls = "grade-ideal" if s.grade == "IDEAL" else "grade-fallback"
-        bias_cls  = "bias-long" if s.bias == "LONG" else ("bias-short" if s.bias == "SHORT" else "bias-neutral")
-        cards.append(f"""
-        <div class="setup-card">
-            <div class="setup-header">
-                <span class="setup-ticker">{s.ticker}</span>
-                <span class="setup-bias {bias_cls}">{s.bias}</span>
-                <span class="setup-grade {grade_cls}">{s.grade}</span>
-            </div>
-            <div class="setup-row">
-                <span class="setup-stat">Price <strong>{s.price}</strong></span>
-                <span class="setup-stat">RSI <strong>{s.rsi_val}</strong></span>
-                <span class="setup-stat">EMA <strong>{s.alignment}</strong></span>
-            </div>
-            <div class="setup-levels">
-                S: {s.support} &nbsp;|&nbsp; R: {s.resistance}
-            </div>
-            <div class="setup-entry">{s.entry_note}</div>
-        </div>""")
+def _structural_guardrails(setup, regime: str) -> list[str]:
+    """
+    Structural guardrail check applicable without options data.
+    Mirrors the execution-level hard guardrails except for options liquidity,
+    which requires the full sniper pipeline. Any setup failing here must not
+    be ranked — it is demoted to the watchlist.
+    """
+    failures = []
+    if setup.rr < 2.0:
+        failures.append(f"R:R {setup.rr:.1f} — below 2:1 minimum")
+    if setup.grade != "A":
+        failures.append(f"Chart grade {setup.grade} — A required")
+    if setup.setup_type == "none":
+        failures.append("No clear chart structure")
+    if (regime == "RISK ON"  and setup.bias == "SHORT") or \
+       (regime == "RISK OFF" and setup.bias == "LONG"):
+        failures.append(f"Direction conflicts with {regime}")
+    return failures
 
-    if no_trade:
-        skip = ", ".join(s.ticker for s in no_trade)
-        cards.append(f'<div class="skip-list">Skip: {skip}</div>')
 
-    return "".join(cards)
+def _setup_cards(setups: list, regime: str) -> str:
+    """
+    Three-tier presentation:
+      1. Validated Top Trades     — passed all structural guardrails, actionable
+      2. Watchlist Setups         — grade A/B with identifiable structure, but one
+                                    guardrail blocks execution; shows primary blocker
+      3. Not on radar             — grade C or no structure; compact list only
+
+    No setup may appear in tier 1 unless it passes every structural guardrail.
+    """
+    validated = []
+    watchlist = []   # good chart + structure, but blocked
+    off_radar = []   # grade C or setup_type=none
+
+    for s in setups:
+        failures = _structural_guardrails(s, regime)
+        if not failures:
+            validated.append(s)
+        elif s.grade in ("A", "B") and s.setup_type != "none":
+            watchlist.append((s, failures))
+        else:
+            off_radar.append(s)
+
+    bias_cls_map  = {"LONG": "bias-long", "SHORT": "bias-short"}
+    grade_cls_map = {"A": "grade-a", "B": "grade-b", "C": "grade-c"}
+    html = ""
+
+    # ── Tier 1: Validated Top Trades ──────────────────────────
+    if not validated:
+        html += '<div class="no-setups">No validated trades today — stay flat or wait</div>'
+    else:
+        for s in validated[:3]:
+            bias_cls  = bias_cls_map.get(s.bias, "bias-neutral")
+            grade_cls = grade_cls_map.get(s.grade, "")
+            html += f"""
+            <div class="setup-card">
+                <div class="setup-header">
+                    <span class="setup-ticker">{s.ticker}</span>
+                    <span class="setup-bias {bias_cls}">{s.bias}</span>
+                    <span class="setup-grade {grade_cls}">{s.grade}</span>
+                </div>
+                <div class="setup-row">
+                    <span class="setup-stat">Price <strong>{s.price}</strong></span>
+                    <span class="setup-stat">RSI <strong>{s.rsi_val}</strong></span>
+                    <span class="setup-stat">R:R <strong>{s.rr:.1f}:1</strong></span>
+                </div>
+                <div class="setup-levels">S: {s.support} &nbsp;|&nbsp; R: {s.resistance}</div>
+                <div class="setup-entry">{s.entry_note}</div>
+                <div class="setup-inv">Stop: {s.invalidation}</div>
+            </div>"""
+
+    # ── Tier 2: Watchlist — Good Structure, Not Trade-Ready ───
+    if watchlist:
+        html += """
+        <div class="watchlist-label">Watchlist Setups — Good Structure, Not Trade-Ready</div>
+        <div class="watchlist-note">Chart structure is identifiable but at least one guardrail blocks execution. Monitor only.</div>"""
+        for s, reasons in watchlist[:5]:
+            bias_cls   = bias_cls_map.get(s.bias, "bias-neutral")
+            grade_cls  = grade_cls_map.get(s.grade, "")
+            disqualifier = _primary_disqualifier(reasons)
+            html += f"""
+            <div class="watchlist-card">
+                <div class="watchlist-row">
+                    <span class="watchlist-ticker">{s.ticker}</span>
+                    <span class="setup-bias {bias_cls}" style="font-size:0.72rem;padding:1px 7px">{s.bias}</span>
+                    <span class="watchlist-grade grade-{s.grade.lower()}">{s.grade}</span>
+                </div>
+                <div class="watchlist-blocker">Why not trading: {disqualifier}</div>
+            </div>"""
+
+    # ── Tier 3: Off radar ─────────────────────────────────────
+    if off_radar:
+        tickers = ", ".join(s.ticker for s in off_radar)
+        html += f'<div class="off-radar">Not on radar (weak chart / no structure): {tickers}</div>'
+
+    return html
+
+
+def _upcoming_rows(events: list[dict]) -> str:
+    if not events:
+        return '<tr><td colspan="4" class="no-events">No major events remaining this month</td></tr>'
+    rows = []
+    current_date = None
+    for e in events:
+        d = e.get("date", "")
+        if d != current_date:
+            current_date = d
+            try:
+                from datetime import datetime as _dt
+                label = _dt.strptime(d, "%Y-%m-%d").strftime("%a  %b %d")
+            except Exception:
+                label = d
+            rows.append(f'<tr><td colspan="4" class="ev-date-header">{label}</td></tr>')
+        url = e.get("url", "#")
+        rows.append(f"""
+        <tr>
+            <td class="ev-time">{e['time']} UTC</td>
+            <td><span class="impact-badge impact-high">HIGH</span></td>
+            <td class="ev-name"><a href="{url}" target="_blank" rel="noopener">{e['event']}</a></td>
+            <td class="ev-est">{e['consensus']}</td>
+        </tr>""")
+    return "".join(rows)
 
 
 def _sector_rows(data_map: dict, extra: dict) -> str:
@@ -220,8 +338,9 @@ _STYLE = """
     .macro-table { width: 100%; border-collapse: collapse; }
     .macro-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
     .macro-table tr:last-child { border-bottom: none; }
-    .row-label  { color: var(--muted); padding: 7px 0; width: 40%; }
+    .row-label  { color: var(--muted); padding: 7px 0; width: 38%; }
     .row-price  { font-weight: 600; padding: 7px 8px; }
+    .row-dollar { padding: 7px 6px; font-size: 0.85rem; }
     .row-change { font-weight: 600; padding: 7px 0; text-align: right; }
 
     /* Calendar */
@@ -235,6 +354,11 @@ _STYLE = """
     .impact-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
     .impact-med  { background: rgba(96,165,250,0.15); color: #93c5fd; }
     .no-events   { color: var(--muted); padding: 12px 0; text-align: center; }
+    .ev-date-header { background: rgba(30,58,95,0.4); color: var(--muted);
+                      font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
+                      letter-spacing: 0.07em; padding: 6px 4px; }
+    .ev-name a  { color: var(--text); text-decoration: none; }
+    .ev-name a:hover { color: var(--blue); text-decoration: underline; }
 
     /* Setups */
     .setups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
@@ -251,8 +375,36 @@ _STYLE = """
     .bias-long    { background: rgba(34,197,94,0.15); color: #86efac; }
     .bias-short   { background: rgba(239,68,68,0.15); color: #fca5a5; }
     .bias-neutral { background: rgba(245,158,11,0.15); color: #fde68a; }
-    .grade-ideal   { background: rgba(96,165,250,0.15); color: #93c5fd; }
-    .grade-fallback{ background: rgba(167,139,250,0.15); color: #c4b5fd; }
+    .grade-a { background: rgba(34,197,94,0.15);   color: #86efac; }
+    .grade-b { background: rgba(245,158,11,0.15);  color: #fde68a; }
+    .grade-c { background: rgba(239,68,68,0.15);   color: #fca5a5; }
+
+    /* ── Watchlist — visually and semantically distinct from validated trades ── */
+    .watchlist-label {
+        margin-top: 20px; padding: 6px 0 2px;
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.1em; color: #6b7280;
+        border-top: 1px dashed rgba(75,85,99,0.4);
+    }
+    .watchlist-note {
+        font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; font-style: italic;
+    }
+    .watchlist-card {
+        background: rgba(15,20,30,0.5); border: 1px solid rgba(75,85,99,0.25);
+        border-radius: 8px; padding: 8px 12px; margin-bottom: 5px; opacity: 0.7;
+    }
+    .watchlist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+    .watchlist-ticker { font-weight: 700; font-size: 0.88rem; color: #9ca3af; }
+    .watchlist-grade  { font-size: 0.72rem; margin-left: auto; padding: 1px 7px;
+                        border-radius: 999px; }
+    .watchlist-blocker {
+        font-size: 0.75rem; color: #6b7280;
+    }
+    .watchlist-blocker::before { content: "⛔ "; }
+    /* Off-radar — minimal, no card treatment */
+    .off-radar {
+        margin-top: 10px; font-size: 0.72rem; color: #4b5563; font-style: italic;
+    }
     .setup-row { display: flex; gap: 16px; margin-bottom: 6px; }
     .setup-stat { font-size: 0.85rem; color: var(--muted); }
     .setup-stat strong { color: var(--text); }
@@ -312,9 +464,12 @@ _STYLE = """
 
 # ── Full HTML builder ────────────────────────────────────────
 
-def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None) -> str:
+def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None,
+                         month_events: list | None = None) -> str:
     if extra is None:
         extra = {}
+    if month_events is None:
+        month_events = []
 
     now = datetime.now().strftime("%A, %B %d %Y  —  %I:%M %p PST")
     regime = classify(data_map)
@@ -394,12 +549,22 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
         </div>
     </div>
 
+    <!-- Upcoming This Month -->
+    <div class="section">
+        <div class="section-title">Upcoming This Month — High Impact Only</div>
+        <div class="card">
+            <table class="cal-table">
+                {_upcoming_rows(month_events)}
+            </table>
+        </div>
+    </div>
+
     <!-- Setups -->
     <div class="section">
-        <div class="section-title">Top Setups</div>
+        <div class="section-title">Validated Top Trades <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:6px">structural guardrails only — options not yet validated</span></div>
         <div class="regime-note {regime_note_cls}">{regime_note_text}</div>
         <div class="setups-grid">
-            {_setup_cards(setups)}
+            {_setup_cards(setups, regime)}
         </div>
     </div>
 
@@ -420,7 +585,8 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
 
 
 def save(path: str = "premarket.html", data_map: dict | None = None,
-         setups: list | None = None, extra: dict | None = None) -> None:
+         setups: list | None = None, extra: dict | None = None,
+         month_events: list | None = None) -> None:
     from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS
     from core.fetcher import fetch_all
     from sniper.scanner import scan
@@ -431,8 +597,10 @@ def save(path: str = "premarket.html", data_map: dict | None = None,
         setups = scan(SNIPER_SYMBOLS)
     if extra is None:
         extra = fetch_all({"GDX": ["GDX"], "IWM": ["IWM"]})
+    if month_events is None:
+        month_events = get_month_events()
 
-    html = build_premarket_html(data_map, setups, extra)
+    html = build_premarket_html(data_map, setups, extra, month_events)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"HTML saved → {path}")

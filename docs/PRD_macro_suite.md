@@ -138,6 +138,10 @@ trading-projects/
 - Clean, readable formatting
 - Minimal noise
 - Strong signal hierarchy:
+
+### Output Consistency Rule
+
+No setup may be presented as a top trade on any output surface — pre-market report, sniper report, HTML dashboard, or terminal — unless it has passed the same execution-level hard guardrails (R:R ≥ 2:1, chart grade A, regime-aligned, options liquid, structure clear). Scanner output that has not been guardrail-validated must not be ranked alongside validated trades. Unvalidated setups may be shown in a clearly labelled watchlist section only.
   - Timestamp
   - Regime
   - Primary driver

@@ -115,9 +115,12 @@ def _hard_guardrails(setup: Setup, opts: OptionsAnalysis | None, regime: str) ->
     if setup.setup_type == "none":
         failures.append("No clear chart structure")
 
-    if (regime == "RISK ON"  and setup.bias == "SHORT") or \
-       (regime == "RISK OFF" and setup.bias == "LONG"):
-        failures.append(f"Trade direction conflicts with {regime} regime")
+    if regime == "RISK OFF" and setup.bias == "LONG":
+        failures.append("LONG suppressed — RISK OFF regime")
+    if regime == "RISK ON" and setup.bias == "SHORT" and setup.grade != "A":
+        # A-grade shorts are permitted in RISK ON (exceptional structure required)
+        # Non-A shorts are suppressed — regime strongly favours longs
+        failures.append("SHORT suppressed in RISK ON — A-grade chart required")
 
     return failures
 

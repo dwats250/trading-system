@@ -19,7 +19,9 @@ from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS, TICKERS
 from core.fetcher import fetch_all, fetch_label
 from core.formatter import arrow, asset_line, divider, fmt_pct, fmt_price
 from core.notifier import send
+from macro.focus import format_focus, route
 from macro.incidents import detect
+from macro.playbook import format_playbook, generate
 from macro.regime import classify, cross_asset_read, drivers
 from outputs.premarket_html import save as save_html
 from reports.calendar import format_events, get_events
@@ -86,7 +88,42 @@ def _calendar_section() -> list[str]:
     return lines
 
 
-def _setups_section(data_map: dict) -> list[str]:
+def _playbook_section(playbook: dict) -> list[str]:
+    return format_playbook(playbook)
+
+
+def _key_levels_section(setups: list, focus: dict) -> list[str]:
+    setup_map = {s.ticker: s for s in setups}
+    lines = [f"KEY LEVELS  [{focus['sub_regime']}]"]
+
+    groups = [("Primary", focus["primary"]), ("Secondary", focus["secondary"])]
+    any_found = False
+
+    for group_name, tickers in groups:
+        if not tickers:
+            continue
+        found = [(t, setup_map[t]) for t in tickers if t in setup_map]
+        if not found:
+            continue
+        any_found = True
+        lines.append(f"  {group_name}:")
+        for ticker, s in found:
+            setup_label = s.setup_type.title() if s.setup_type != "none" else "No setup"
+            lines.append(
+                f"    {ticker:<6} S {s.support:<8} R {s.resistance:<8}"
+                f" — {setup_label:<12} Confidence {s.confidence}/10"
+            )
+
+    if not any_found:
+        lines.append("  No focused tickers with data available")
+
+    if focus.get("warning"):
+        lines.append(f"  {focus['warning']}")
+
+    return lines
+
+
+def _setups_section(data_map: dict, setups: list | None = None) -> list[str]:
     regime = classify(data_map)
     regime_notes = {
         "RISK OFF": "⚠  RISK OFF — reduce size, favor shorts or cash",
@@ -98,7 +135,8 @@ def _setups_section(data_map: dict) -> list[str]:
     lines.append(f"  {regime_notes.get(regime, regime)}")
     lines.append("")
 
-    setups = scan(SNIPER_SYMBOLS)
+    if setups is None:
+        setups = scan(SNIPER_SYMBOLS)
     tradeable = [s for s in setups if s.grade != "NO TRADE"]
     no_trade  = [s for s in setups if s.grade == "NO TRADE"]
 
@@ -156,6 +194,15 @@ def build_report() -> str:
     print("Fetching market data...", flush=True)
     data_map = fetch_all(MACRO_SYMBOLS)
 
+    # Pre-compute shared state so sections don't re-derive it
+    regime   = classify(data_map)
+    primary, secondary = drivers(data_map)
+    playbook = generate(regime, primary, secondary)
+    focus    = route(primary, secondary, regime)
+
+    print("Scanning setups...", flush=True)
+    setups = scan(SNIPER_SYMBOLS)
+
     lines: list[str] = []
     lines.append("PRE-MARKET REPORT")
     lines.append(now)
@@ -170,12 +217,22 @@ def build_report() -> str:
 
     lines.append("")
     lines.append(divider())
+    lines.extend(_playbook_section(playbook))
+
+    lines.append("")
+    lines.extend(format_focus(focus))
+
+    lines.append("")
+    lines.append(divider())
     lines.extend(_calendar_section())
 
     lines.append("")
     lines.append(divider())
-    print("Scanning setups...", flush=True)
-    lines.extend(_setups_section(data_map))
+    lines.extend(_setups_section(data_map, setups))
+
+    lines.append("")
+    lines.append(divider())
+    lines.extend(_key_levels_section(setups, focus))
 
     lines.append("")
     lines.append(divider())

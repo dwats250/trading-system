@@ -7,7 +7,8 @@
 
 from __future__ import annotations
 
-from datetime import date
+import calendar as _cal
+from datetime import date, timedelta
 from typing import Optional
 
 import requests
@@ -72,10 +73,33 @@ def get_events(target_date: Optional[date] = None) -> list[dict]:
             "impact":    _impact(name),
             "consensus": consensus or "—",
             "previous":  previous  or "—",
+            "date":      target_date.isoformat(),
+            "url":       f"https://www.nasdaq.com/market-activity/economic-events?date={target_date.isoformat()}",
         })
 
     # Sort by impact (HIGH first) then time
     events.sort(key=lambda e: (0 if e["impact"] == "HIGH" else 1, e["time"]))
+    return events
+
+
+def get_month_events(from_date: Optional[date] = None) -> list[dict]:
+    """
+    Return HIGH-impact events for the rest of the current month.
+    Starts from from_date (default: tomorrow).
+    """
+    if from_date is None:
+        from_date = date.today() + timedelta(days=1)
+
+    last_day  = _cal.monthrange(from_date.year, from_date.month)[1]
+    end_date  = date(from_date.year, from_date.month, last_day)
+
+    events: list[dict] = []
+    d = from_date
+    while d <= end_date:
+        for e in get_events(d):
+            if e["impact"] == "HIGH":
+                events.append(e)
+        d += timedelta(days=1)
     return events
 
 
