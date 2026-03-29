@@ -1,51 +1,52 @@
 # ============================================================
 # MACRO SUITE — Ticker Configuration
 # ============================================================
-# Each key is a human label. Values are Yahoo Finance symbols
-# listed in priority order — the fetcher tries each in turn
-# and uses the first one that returns data.
+# All tickers verified against Yahoo Finance.
+# Grouped by theme for use in macro pulse, sniper, and
+# the pre-market report.
 # ============================================================
 
+TICKERS = {
+    "macro":         ["DX-Y.NYB", "^TNX", "^VIX", "ES=F", "NQ=F", "RTY=F", "HYG", "BTC-USD"],
+    "metals":        ["GLD", "SLV", "GDX", "SILJ", "GC=F", "SI=F"],
+    "oil_core":      ["USO", "CL=F", "BZ=F", "XLE", "OXY", "CVX", "XOM"],
+    "oil_beta":      ["GUSH"],
+    "energy_supply": ["LNG", "HAL", "SLB"],
+    "fx":            ["UUP", "FXE", "JPY=X"],   # JPY=X = USD/JPY
+    "equities":      ["SPY", "QQQ", "IWM", "SMCI", "AMD", "NVDA"],
+    "commodities":   ["HG=F"],                  # Copper — growth proxy
+}
+
+# Flat list of all macro-relevant symbols for the regime scanner
 MACRO_SYMBOLS = {
-    "10Y":  ["^TNX"],           # US 10-Year yield
-    "DXY":  ["DX-Y.NYB", "UUP"], # Dollar index (UUP ETF as fallback)
-    "UJ":   ["JPY=X"],          # USD/JPY — yen carry proxy
-    "VIX":  ["^VIX"],           # Volatility index
-    "WTI":  ["CL=F"],           # WTI crude oil futures
-    "BRT":  ["BZ=F"],           # Brent crude oil futures
+    "DXY":  ["DX-Y.NYB"],       # Dollar index
+    "10Y":  ["^TNX"],           # US 10-year yield
+    "VIX":  ["^VIX"],           # Volatility
+    "ES":   ["ES=F"],           # S&P 500 futures
+    "NQ":   ["NQ=F"],           # Nasdaq futures
+    "RTY":  ["RTY=F"],          # Russell 2000 futures
+    "HYG":  ["HYG"],            # High-yield bonds — credit risk
+    "BTC":  ["BTC-USD"],        # Bitcoin — liquidity proxy
+    "UJ":   ["JPY=X"],          # USD/JPY
+    "WTI":  ["CL=F"],           # WTI crude
+    "BRT":  ["BZ=F"],           # Brent crude
+    "XAU":  ["GC=F"],           # Gold
+    "XAG":  ["SI=F"],           # Silver
+    "HG":   ["HG=F"],           # Copper
     "SPY":  ["SPY"],            # S&P 500 ETF
     "QQQ":  ["QQQ"],            # Nasdaq-100 ETF
-    "NDX":  ["^NDX"],           # Nasdaq-100 index
-    "XAU":  ["GC=F"],           # Gold futures
-    "XAG":  ["SI=F"],           # Silver futures
-    "HG":   ["HG=F"],           # Copper futures — growth proxy
-    "HYG":  ["HYG"],            # High-yield bonds — credit risk proxy
-    "BTC":  ["BTC-USD"],        # Bitcoin — risk/liquidity proxy
 }
 
 # Tickers scanned by the Entry Sniper
-# Grouped by theme — sniper scores all and surfaces the best setups
 SNIPER_SYMBOLS = {
-    # Energy
-    "XLE":  "XLE",    # Energy sector ETF
-    "XOM":  "XOM",    # ExxonMobil
-    "OXY":  "OXY",    # Occidental Petroleum
-    "GUSH": "GUSH",   # 2x leveraged oil & gas ETF
-    # Equities
-    "SPY":  "SPY",    # S&P 500
-    "QQQ":  "QQQ",    # Nasdaq-100
-    # Metals
-    "GDX":  "GDX",    # Gold miners ETF
-    "SLV":  "SLV",    # Silver ETF
-    # Volatility / Macro plays
-    "TLT":  "TLT",    # 20Y Treasury ETF — rates play
-    "UUP":  "UUP",    # Dollar ETF
-}
-
-# Tickers used by the Oil module
-OIL_SYMBOLS = {
-    "GUSH": ["GUSH"],
-    "XLE":  ["XLE"],
-    "OXY":  ["OXY"],
-    "XOM":  ["XOM"],
+    "XLE":  "XLE",
+    "XOM":  "XOM",
+    "OXY":  "OXY",
+    "GUSH": "GUSH",
+    "SPY":  "SPY",
+    "QQQ":  "QQQ",
+    "GDX":  "GDX",
+    "SLV":  "SLV",
+    "TLT":  "TLT",
+    "UUP":  "UUP",
 }

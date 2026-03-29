@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+# ============================================================
+# MACRO SUITE — Pre-Market Report
+# ============================================================
+# Runs at 6:00 AM PST on weekdays.
+# Delivers a complete morning brief:
+#   1. Overnight recap (futures + key macro)
+#   2. Regime & drivers
+#   3. Today's economic events
+#   4. Top trade setups
+#   5. Sector snapshot (metals, oil, equities)
+# ============================================================
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS, TICKERS
+from core.fetcher import fetch_all, fetch_label
+from core.formatter import arrow, asset_line, divider, fmt_pct, fmt_price
+from core.notifier import send
+from macro.incidents import detect
+from macro.regime import classify, cross_asset_read, drivers
+from reports.calendar import format_events, get_events
+from sniper.scanner import scan
+
+
+# ── Section builders ─────────────────────────────────────────
+
+def _overnight_recap(data_map: dict) -> list[str]:
+    lines = ["OVERNIGHT RECAP"]
+
+    # Futures first — these trade overnight and set the tone
+    futures = [("ES", "S&P 500"), ("NQ", "Nasdaq"), ("RTY", "Russell")]
+    for label, name in futures:
+        d = data_map.get(label)
+        if d:
+            lines.append(f"  {label:<4} {arrow(d['pct'])} {fmt_pct(d['pct']):<10} @ {fmt_price(d['price'])}  ({name})")
+
+    lines.append("")
+
+    # Key macro context
+    macro_items = [
+        ("DXY", "Dollar"),
+        ("10Y", "10Y Yield"),
+        ("VIX", "Volatility"),
+        ("UJ",  "USD/JPY"),
+        ("XAU", "Gold"),
+        ("WTI", "WTI Oil"),
+    ]
+    for label, name in macro_items:
+        d = data_map.get(label)
+        if d:
+            lines.append(f"  {label:<4} {arrow(d['pct'])} {fmt_pct(d['pct']):<10} @ {fmt_price(d['price'])}  ({name})")
+
+    return lines
+
+
+def _regime_section(data_map: dict) -> list[str]:
+    regime = classify(data_map)
+    primary, secondary = drivers(data_map)
+    incidents = detect(data_map)
+    read = cross_asset_read(data_map)
+
+    lines = ["MACRO REGIME"]
+    lines.append(f"  {regime}")
+    lines.append(f"  Primary:   {primary}")
+    lines.append(f"  Secondary: {secondary}")
+
+    if incidents:
+        lines.append("")
+        for inc in incidents:
+            lines.append(f"  ⚠  {inc}")
+
+    lines.append("")
+    lines.append(f"  {read}")
+    return lines
+
+
+def _calendar_section() -> list[str]:
+    events = get_events()
+    lines = ["TODAY'S EVENTS  (UTC)"]
+    for line in format_events(events):
+        lines.append(f"  {line}")
+    return lines
+
+
+def _setups_section(data_map: dict) -> list[str]:
+    regime = classify(data_map)
+    regime_notes = {
+        "RISK OFF": "⚠  RISK OFF — reduce size, favor shorts or cash",
+        "MIXED":    "~  Mixed — be selective, wait for clarity",
+        "RISK ON":  "✓  RISK ON — favorable for longs",
+    }
+
+    lines = ["TOP SETUPS"]
+    lines.append(f"  {regime_notes.get(regime, regime)}")
+    lines.append("")
+
+    setups = scan(SNIPER_SYMBOLS)
+    tradeable = [s for s in setups if s.grade != "NO TRADE"]
+    no_trade  = [s for s in setups if s.grade == "NO TRADE"]
+
+    if tradeable:
+        for i, s in enumerate(tradeable[:3], 1):
+            lines.append(f"  {i}. {s.ticker}  —  {s.bias}  [{s.grade}]")
+            lines.append(f"     Price {s.price}  RSI {s.rsi_val}  EMA {s.alignment}")
+            lines.append(f"     {s.entry_note}")
+            lines.append("")
+    else:
+        lines.append("  No clean setups — stay flat")
+        lines.append("")
+
+    if no_trade:
+        lines.append(f"  Skip: {', '.join(s.ticker for s in no_trade)}")
+
+    return lines
+
+
+def _sector_snapshot(data_map: dict) -> list[str]:
+    lines = ["SECTOR SNAPSHOT"]
+
+    sections = [
+        ("Metals",   ["XAU", "XAG", "GDX"]),
+        ("Oil",      ["WTI", "BRT", "XLE"]),
+        ("Equities", ["SPY", "QQQ", "IWM"]),
+        ("Credit",   ["HYG", "BTC"]),
+    ]
+
+    # Fetch extra tickers not in base macro map
+    extra_symbols = {
+        "GDX": ["GDX"],
+        "IWM": ["IWM"],
+    }
+    extra = fetch_all(extra_symbols)
+    combined = {**data_map, **extra}
+
+    for section_name, labels in sections:
+        parts = []
+        for label in labels:
+            d = combined.get(label)
+            if d:
+                parts.append(f"{label} {arrow(d['pct'])} {fmt_pct(d['pct'])}")
+        if parts:
+            lines.append(f"  {section_name:<10} {'  '.join(parts)}")
+
+    return lines
+
+
+# ── Main report builder ──────────────────────────────────────
+
+def build_report() -> str:
+    now = datetime.now().strftime("%Y-%m-%d  %I:%M %p PST")
+
+    print("Fetching market data...", flush=True)
+    data_map = fetch_all(MACRO_SYMBOLS)
+
+    lines: list[str] = []
+    lines.append("PRE-MARKET REPORT")
+    lines.append(now)
+    lines.append(divider("═"))
+
+    lines.append("")
+    lines.extend(_overnight_recap(data_map))
+
+    lines.append("")
+    lines.append(divider())
+    lines.extend(_regime_section(data_map))
+
+    lines.append("")
+    lines.append(divider())
+    lines.extend(_calendar_section())
+
+    lines.append("")
+    lines.append(divider())
+    print("Scanning setups...", flush=True)
+    lines.extend(_setups_section(data_map))
+
+    lines.append("")
+    lines.append(divider())
+    lines.extend(_sector_snapshot(data_map))
+
+    lines.append("")
+    lines.append(divider("═"))
+
+    return "\n".join(lines)
+
+
+def run() -> None:
+    report = build_report()
+    print(report)
+    send(report, title="Pre-Market Report")
+
+
+if __name__ == "__main__":
+    run()
