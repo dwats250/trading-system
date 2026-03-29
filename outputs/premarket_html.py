@@ -1,0 +1,438 @@
+# ============================================================
+# MACRO SUITE — Pre-Market HTML Dashboard
+# ============================================================
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from core.formatter import arrow, fmt_pct, fmt_price
+from macro.incidents import detect
+from macro.regime import classify, cross_asset_read, drivers
+from reports.calendar import get_events
+
+
+# ── Helpers ──────────────────────────────────────────────────
+
+def _cls(pct: float) -> str:
+    if pct > 0: return "up"
+    if pct < 0: return "dn"
+    return "flat"
+
+
+def _regime_cls(regime: str) -> str:
+    if regime == "RISK ON":  return "regime-on"
+    if regime == "RISK OFF": return "regime-off"
+    return "regime-mixed"
+
+
+# ── Section builders ─────────────────────────────────────────
+
+def _futures_cards(data_map: dict) -> str:
+    futures = [("ES", "S&P 500 Fut"), ("NQ", "Nasdaq Fut"), ("RTY", "Russell Fut")]
+    cards = []
+    for label, name in futures:
+        d = data_map.get(label)
+        if not d:
+            continue
+        cls = _cls(d["pct"])
+        cards.append(f"""
+        <div class="fut-card">
+            <div class="fut-name">{name}</div>
+            <div class="fut-price">{fmt_price(d['price'])}</div>
+            <div class="fut-change {cls}">{arrow(d['pct'])} {fmt_pct(d['pct'])}</div>
+        </div>""")
+    return "".join(cards)
+
+
+def _macro_rows(data_map: dict) -> str:
+    items = [
+        ("DXY", "Dollar (DXY)"),
+        ("10Y", "10Y Yield"),
+        ("VIX", "VIX"),
+        ("UJ",  "USD/JPY"),
+        ("XAU", "Gold"),
+        ("XAG", "Silver"),
+        ("WTI", "WTI Oil"),
+        ("BRT", "Brent Oil"),
+        ("HYG", "HYG Credit"),
+        ("BTC", "Bitcoin"),
+        ("HG",  "Copper"),
+    ]
+    rows = []
+    for label, name in items:
+        d = data_map.get(label)
+        if not d:
+            continue
+        cls = _cls(d["pct"])
+        rows.append(f"""
+        <tr>
+            <td class="row-label">{name}</td>
+            <td class="row-price">{fmt_price(d['price'])}</td>
+            <td class="row-change {cls}">{arrow(d['pct'])} {fmt_pct(d['pct'])}</td>
+        </tr>""")
+    return "".join(rows)
+
+
+def _calendar_rows(events: list[dict]) -> str:
+    if not events:
+        return '<tr><td colspan="4" class="no-events">No major events today</td></tr>'
+    rows = []
+    for e in events:
+        impact_cls = "impact-high" if e["impact"] == "HIGH" else "impact-med"
+        rows.append(f"""
+        <tr>
+            <td class="ev-time">{e['time']} UTC</td>
+            <td><span class="impact-badge {impact_cls}">{e['impact']}</span></td>
+            <td class="ev-name">{e['event']}</td>
+            <td class="ev-est">{e['consensus']}</td>
+        </tr>""")
+    return "".join(rows)
+
+
+def _setup_cards(setups: list) -> str:
+    tradeable = [s for s in setups if s.grade != "NO TRADE"]
+    no_trade  = [s for s in setups if s.grade == "NO TRADE"]
+
+    if not tradeable:
+        return '<div class="no-setups">No clean setups — stay flat</div>'
+
+    cards = []
+    for s in tradeable[:3]:
+        grade_cls = "grade-ideal" if s.grade == "IDEAL" else "grade-fallback"
+        bias_cls  = "bias-long" if s.bias == "LONG" else ("bias-short" if s.bias == "SHORT" else "bias-neutral")
+        cards.append(f"""
+        <div class="setup-card">
+            <div class="setup-header">
+                <span class="setup-ticker">{s.ticker}</span>
+                <span class="setup-bias {bias_cls}">{s.bias}</span>
+                <span class="setup-grade {grade_cls}">{s.grade}</span>
+            </div>
+            <div class="setup-row">
+                <span class="setup-stat">Price <strong>{s.price}</strong></span>
+                <span class="setup-stat">RSI <strong>{s.rsi_val}</strong></span>
+                <span class="setup-stat">EMA <strong>{s.alignment}</strong></span>
+            </div>
+            <div class="setup-levels">
+                S: {s.support} &nbsp;|&nbsp; R: {s.resistance}
+            </div>
+            <div class="setup-entry">{s.entry_note}</div>
+        </div>""")
+
+    if no_trade:
+        skip = ", ".join(s.ticker for s in no_trade)
+        cards.append(f'<div class="skip-list">Skip: {skip}</div>')
+
+    return "".join(cards)
+
+
+def _sector_rows(data_map: dict, extra: dict) -> str:
+    combined = {**data_map, **extra}
+    sections = [
+        ("Metals",   ["XAU", "XAG", "GDX"]),
+        ("Oil",      ["WTI", "BRT", "XLE"]),
+        ("Equities", ["SPY", "QQQ", "IWM"]),
+        ("Credit",   ["HYG", "BTC"]),
+    ]
+    rows = []
+    for name, labels in sections:
+        cells = []
+        for label in labels:
+            d = combined.get(label)
+            if d:
+                cls = _cls(d["pct"])
+                cells.append(f'<span class="sector-item {cls}">{label} {arrow(d["pct"])} {fmt_pct(d["pct"])}</span>')
+        if cells:
+            rows.append(f"""
+        <tr>
+            <td class="sector-name">{name}</td>
+            <td class="sector-cells">{"".join(cells)}</td>
+        </tr>""")
+    return "".join(rows)
+
+
+# ── Stylesheet ───────────────────────────────────────────────
+
+_STYLE = """
+    :root {
+        --bg: #070f1e;
+        --surface: #0d1b2e;
+        --surface2: #112240;
+        --border: #1e3a5f;
+        --text: #e2eaf8;
+        --muted: #8bafd4;
+        --green: #22c55e;
+        --red: #ef4444;
+        --yellow: #f59e0b;
+        --blue: #60a5fa;
+        --purple: #a78bfa;
+        --shadow: 0 4px 24px rgba(0,0,0,0.4);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background: var(--bg); color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px; line-height: 1.5; padding: 16px;
+    }
+    .page { max-width: 1000px; margin: 0 auto; }
+
+    /* Header */
+    .report-header {
+        background: linear-gradient(135deg, #0d1b2e, #112240);
+        border: 1px solid var(--border); border-radius: 16px;
+        padding: 20px 24px; margin-bottom: 16px;
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 12px;
+    }
+    .report-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+    .report-meta { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
+    .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill {
+        padding: 6px 14px; border-radius: 999px; font-size: 0.82rem;
+        font-weight: 600; letter-spacing: 0.04em; border: 1px solid;
+    }
+    .regime-on   { background: rgba(34,197,94,0.12);  border-color: rgba(34,197,94,0.4);  color: #86efac; }
+    .regime-off  { background: rgba(239,68,68,0.12);  border-color: rgba(239,68,68,0.4);  color: #fca5a5; }
+    .regime-mixed{ background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #fde68a; }
+
+    /* Sections */
+    .section { margin-bottom: 16px; }
+    .section-title {
+        font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;
+    }
+    .card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
+    }
+
+    /* Futures */
+    .futures-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .fut-card {
+        background: var(--surface2); border: 1px solid var(--border);
+        border-radius: 12px; padding: 14px; text-align: center;
+    }
+    .fut-name  { color: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .fut-price { font-size: 1.3rem; font-weight: 700; margin-bottom: 4px; }
+    .fut-change { font-size: 0.95rem; font-weight: 600; }
+
+    /* Macro table */
+    .macro-table { width: 100%; border-collapse: collapse; }
+    .macro-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .macro-table tr:last-child { border-bottom: none; }
+    .row-label  { color: var(--muted); padding: 7px 0; width: 40%; }
+    .row-price  { font-weight: 600; padding: 7px 8px; }
+    .row-change { font-weight: 600; padding: 7px 0; text-align: right; }
+
+    /* Calendar */
+    .cal-table { width: 100%; border-collapse: collapse; }
+    .cal-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .cal-table tr:last-child { border-bottom: none; }
+    .ev-time  { color: var(--muted); padding: 7px 12px 7px 0; white-space: nowrap; width: 110px; }
+    .ev-name  { padding: 7px 8px; }
+    .ev-est   { color: var(--muted); padding: 7px 0; text-align: right; font-size: 0.85rem; }
+    .impact-badge { padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; }
+    .impact-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
+    .impact-med  { background: rgba(96,165,250,0.15); color: #93c5fd; }
+    .no-events   { color: var(--muted); padding: 12px 0; text-align: center; }
+
+    /* Setups */
+    .setups-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+    .setup-card {
+        background: var(--surface2); border: 1px solid var(--border);
+        border-radius: 12px; padding: 14px;
+    }
+    .setup-header { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+    .setup-ticker { font-size: 1.1rem; font-weight: 700; }
+    .setup-bias, .setup-grade {
+        padding: 2px 10px; border-radius: 999px;
+        font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .bias-long    { background: rgba(34,197,94,0.15); color: #86efac; }
+    .bias-short   { background: rgba(239,68,68,0.15); color: #fca5a5; }
+    .bias-neutral { background: rgba(245,158,11,0.15); color: #fde68a; }
+    .grade-ideal   { background: rgba(96,165,250,0.15); color: #93c5fd; }
+    .grade-fallback{ background: rgba(167,139,250,0.15); color: #c4b5fd; }
+    .setup-row { display: flex; gap: 16px; margin-bottom: 6px; }
+    .setup-stat { font-size: 0.85rem; color: var(--muted); }
+    .setup-stat strong { color: var(--text); }
+    .setup-levels { font-size: 0.82rem; color: var(--muted); margin-bottom: 8px; }
+    .setup-entry { font-size: 0.88rem; color: var(--blue); border-top: 1px solid var(--border); padding-top: 8px; }
+    .skip-list { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
+    .no-setups { color: var(--muted); text-align: center; padding: 20px; }
+    .regime-note {
+        padding: 10px 14px; border-radius: 10px; margin-bottom: 12px;
+        font-size: 0.88rem; font-weight: 600;
+        background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5;
+    }
+    .regime-note.on   { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); color: #86efac; }
+    .regime-note.mixed{ background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.2); color: #fde68a; }
+
+    /* Incidents */
+    .incident-box {
+        background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.25);
+        border-radius: 10px; padding: 10px 14px; margin-bottom: 12px;
+    }
+    .incident-item { color: #fca5a5; font-size: 0.88rem; margin: 2px 0; }
+
+    /* Sector */
+    .sector-table { width: 100%; border-collapse: collapse; }
+    .sector-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .sector-table tr:last-child { border-bottom: none; }
+    .sector-name  { color: var(--muted); padding: 8px 12px 8px 0; width: 90px; font-weight: 600; }
+    .sector-cells { padding: 8px 0; display: flex; flex-wrap: wrap; gap: 12px; }
+    .sector-item  { font-size: 0.88rem; font-weight: 600; }
+
+    /* Summary box */
+    .summary-box {
+        background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+        border-radius: 10px; padding: 12px 14px; margin-top: 12px;
+        color: var(--muted); font-size: 0.9rem;
+    }
+
+    /* Colors */
+    .up   { color: var(--green); }
+    .dn   { color: var(--red); }
+    .flat { color: var(--yellow); }
+
+    /* Two-col layout */
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+    /* Footer */
+    .footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 20px 0 4px; }
+
+    @media (max-width: 640px) {
+        .futures-grid { grid-template-columns: 1fr; }
+        .two-col { grid-template-columns: 1fr; }
+        .setups-grid { grid-template-columns: 1fr; }
+        .sector-cells { flex-direction: column; gap: 4px; }
+    }
+"""
+
+
+# ── Full HTML builder ────────────────────────────────────────
+
+def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None) -> str:
+    if extra is None:
+        extra = {}
+
+    now = datetime.now().strftime("%A, %B %d %Y  —  %I:%M %p PST")
+    regime = classify(data_map)
+    primary, secondary = drivers(data_map)
+    incidents = detect(data_map)
+    read = cross_asset_read(data_map)
+    events = get_events()
+
+    regime_cls = _regime_cls(regime)
+
+    incident_html = ""
+    if incidents:
+        items = "".join(f'<div class="incident-item">⚠ {i}</div>' for i in incidents)
+        incident_html = f'<div class="incident-box">{items}</div>'
+
+    regime_note_cls = "on" if regime == "RISK ON" else ("mixed" if regime == "MIXED" else "")
+    regime_note_text = {
+        "RISK OFF": "⚠ RISK OFF — reduce size, favor shorts or cash",
+        "MIXED":    "~ Mixed environment — be selective",
+        "RISK ON":  "✓ RISK ON — favorable for long setups",
+    }.get(regime, regime)
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pre-Market Report — {datetime.now().strftime('%b %d')}</title>
+    <style>{_STYLE}</style>
+</head>
+<body>
+<div class="page">
+
+    <!-- Header -->
+    <div class="report-header">
+        <div>
+            <div class="report-title">Pre-Market Report</div>
+            <div class="report-meta">{now}</div>
+        </div>
+        <div class="pill-group">
+            <span class="pill {regime_cls}">{regime}</span>
+        </div>
+    </div>
+
+    <!-- Futures -->
+    <div class="section">
+        <div class="section-title">Overnight Futures</div>
+        <div class="futures-grid">
+            {_futures_cards(data_map)}
+        </div>
+    </div>
+
+    <!-- Macro + Calendar side by side -->
+    <div class="two-col">
+        <div class="section">
+            <div class="section-title">Macro Snapshot</div>
+            <div class="card">
+                <table class="macro-table">
+                    {_macro_rows(data_map)}
+                </table>
+                <div class="summary-box">{read}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">Today's Events</div>
+            <div class="card">
+                {incident_html}
+                <table class="cal-table">
+                    {_calendar_rows(events)}
+                </table>
+                <div class="summary-box">
+                    Primary: {primary}<br>
+                    Secondary: {secondary}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Setups -->
+    <div class="section">
+        <div class="section-title">Top Setups</div>
+        <div class="regime-note {regime_note_cls}">{regime_note_text}</div>
+        <div class="setups-grid">
+            {_setup_cards(setups)}
+        </div>
+    </div>
+
+    <!-- Sector -->
+    <div class="section">
+        <div class="section-title">Sector Snapshot</div>
+        <div class="card">
+            <table class="sector-table">
+                {_sector_rows(data_map, extra)}
+            </table>
+        </div>
+    </div>
+
+    <div class="footer">Macro Suite — Pre-Market Report</div>
+</div>
+</body>
+</html>"""
+
+
+def save(path: str = "premarket.html", data_map: dict | None = None,
+         setups: list | None = None, extra: dict | None = None) -> None:
+    from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS
+    from core.fetcher import fetch_all
+    from sniper.scanner import scan
+
+    if data_map is None:
+        data_map = fetch_all(MACRO_SYMBOLS)
+    if setups is None:
+        setups = scan(SNIPER_SYMBOLS)
+    if extra is None:
+        extra = fetch_all({"GDX": ["GDX"], "IWM": ["IWM"]})
+
+    html = build_premarket_html(data_map, setups, extra)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"HTML saved → {path}")

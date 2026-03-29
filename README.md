@@ -29,10 +29,11 @@ laptop
 echo 'alias macro="cd ~/trading-system && source .venv/bin/activate && python main.py"' >> ~/.bash_profile && source ~/.bash_profile
 ```
 
-**After setup, daily use is just two commands:**
+**After setup, daily use:**
 ```bash
-laptop   # connect to laptop from Termux
-macro    # run the trading system
+laptop      # connect to laptop from Termux
+macro       # run macro pulse + entry sniper
+premarket   # run full pre-market report
 ```
 
 ---

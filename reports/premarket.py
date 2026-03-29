@@ -21,6 +21,7 @@ from core.formatter import arrow, asset_line, divider, fmt_pct, fmt_price
 from core.notifier import send
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
+from outputs.premarket_html import save as save_html
 from reports.calendar import format_events, get_events
 from sniper.scanner import scan
 
@@ -190,6 +191,7 @@ def run() -> None:
     report = build_report()
     print(report)
     send(report, title="Pre-Market Report")
+    save_html()
 
 
 if __name__ == "__main__":
