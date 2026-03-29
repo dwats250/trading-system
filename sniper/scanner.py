@@ -1,20 +1,20 @@
 # ============================================================
-# MACRO SUITE — Sniper Scanner
-# ============================================================
-# Fetches OHLCV history, runs pandas-ta indicators,
-# scores and ranks trade setups.
+# MACRO SUITE — Sniper Scanner (Chart Quality Engine)
 # ============================================================
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import yfinance as yf
 
 from sniper.analysis import (
     add_indicators,
-    classify_setup,
+    chart_grade,
+    confidence_score,
+    detect_setup_type,
     ema_alignment,
+    invalidation_level,
     setup_score,
     support_resistance,
 )
@@ -22,42 +22,45 @@ from sniper.analysis import (
 
 @dataclass
 class Setup:
-    ticker: str
-    price: float
-    e9: float
-    e21: float
-    e50: float
-    rsi_val: float
-    alignment: str
-    support: float
-    resistance: float
-    score: int
-    grade: str
-    bias: str
-    entry_note: str
+    ticker:      str
+    price:       float
+    e9:          float
+    e21:         float
+    e50:         float
+    rsi_val:     float
+    alignment:   str        # bullish / bearish / mixed
+    support:     float
+    resistance:  float
+    score:       int        # raw 0-6
+    grade:       str        # A / B / C
+    confidence:  int        # 0-10
+    setup_type:  str        # trend / pullback / breakout / reversal / none
+    bias:        str        # LONG / SHORT / NEUTRAL
+    entry_note:  str
+    invalidation: float     # price that proves trade wrong
 
 
 def _fetch(symbol: str) -> object | None:
     try:
         df = yf.Ticker(symbol).history(period="90d")
-        if len(df) < 55:
-            return None
-        return df
+        return df if len(df) >= 55 else None
     except Exception:
         return None
 
 
 def _bias(alignment: str, rsi_val: float) -> str:
-    if alignment == "bullish" and rsi_val < 72:
-        return "LONG"
-    if alignment == "bearish" and rsi_val > 28:
-        return "SHORT"
+    if alignment == "bullish" and rsi_val < 72:   return "LONG"
+    if alignment == "bearish" and rsi_val > 28:   return "SHORT"
     return "NEUTRAL"
 
 
 def _entry_note(bias: str, price: float, e9: float, e21: float,
-                resistance: float, support: float) -> str:
+                resistance: float, support: float, setup_type: str) -> str:
     if bias == "LONG":
+        if setup_type == "breakout":
+            return f"Break and close above {resistance:.2f}"
+        if setup_type == "pullback":
+            return f"Entry on dip to EMA9 (~{e9:.2f}) or EMA21 (~{e21:.2f})"
         if price > e9 * 1.03:
             return f"Extended — wait for pullback to EMA21 (~{e21:.2f})"
         return f"Entry near EMA9 (~{e9:.2f}) or break above {resistance:.2f}"
@@ -69,7 +72,7 @@ def _entry_note(bias: str, price: float, e9: float, e21: float,
 
 
 def scan(tickers: dict[str, str]) -> list[Setup]:
-    """Scan all tickers and return setups sorted best → worst."""
+    """Scan tickers and return setups sorted by grade then confidence."""
     setups: list[Setup] = []
 
     for label, symbol in tickers.items():
@@ -79,7 +82,6 @@ def scan(tickers: dict[str, str]) -> list[Setup]:
 
         df = add_indicators(df)
         row = df.iloc[-1]
-        prev = df.iloc[-2]
 
         price   = round(float(row["Close"]), 2)
         e9      = round(float(row.get("EMA_9",  row["Close"])), 2)
@@ -87,23 +89,29 @@ def scan(tickers: dict[str, str]) -> list[Setup]:
         e50     = round(float(row.get("EMA_50", row["Close"])), 2)
         rsi_val = round(float(row.get("RSI_14", 50)), 1)
 
-        alignment = ema_alignment(price, e9, e21, e50)
+        alignment  = ema_alignment(price, e9, e21, e50)
         support, resistance = support_resistance(df)
         last_bullish = float(row["Close"]) > float(row["Open"])
 
-        score = setup_score(price, e9, e21, e50, rsi_val, last_bullish)
-        grade = classify_setup(score)
-        bias  = _bias(alignment, rsi_val)
-        note  = _entry_note(bias, price, e9, e21, resistance, support)
+        score      = setup_score(price, e9, e21, e50, rsi_val, last_bullish)
+        grade      = chart_grade(score)
+        setup_type = detect_setup_type(price, e9, e21, e50, rsi_val, resistance)
+        conf       = confidence_score(score, setup_type, alignment)
+        bias       = _bias(alignment, rsi_val)
+        inv        = invalidation_level(bias, support, e21, e50)
+        note       = _entry_note(bias, price, e9, e21, resistance, support, setup_type)
 
         setups.append(Setup(
             ticker=label, price=price,
             e9=e9, e21=e21, e50=e50,
             rsi_val=rsi_val, alignment=alignment,
             support=support, resistance=resistance,
-            score=score, grade=grade, bias=bias,
-            entry_note=note,
+            score=score, grade=grade,
+            confidence=conf, setup_type=setup_type,
+            bias=bias, entry_note=note, invalidation=inv,
         ))
 
-    setups.sort(key=lambda s: s.score, reverse=True)
+    # Sort: A before B before C, then by confidence descending
+    grade_order = {"A": 0, "B": 1, "C": 2}
+    setups.sort(key=lambda s: (grade_order[s.grade], -s.confidence))
     return setups
