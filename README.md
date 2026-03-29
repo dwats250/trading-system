@@ -4,95 +4,57 @@ This repository contains my market-analysis and trading tools, built for speed, 
 
 ---
 
-🚀 Active Tools
+## Run
 
-macro/
-
-- Macro Pulse
-  - Real-time macro regime scanner
-  - Mobile-first (Termux + notifications)
-  - Tracks cross-asset flows:
-    - Rates (10Y)
-    - Dollar (DXY, UJ)
-    - Volatility (VIX)
-    - Energy (WTI, Brent)
-    - Equities (SPY, QQQ)
-    - Metals (XAU, XAG)
-    - Crypto (BTC)
+```bash
+python main.py
+```
 
 ---
 
-sniper/
+## Phone Setup (Termux — first time only)
 
-- Entry Sniper (in progress)
-- Focus: high-probability setups and execution
+```bash
+git clone https://github.com/dwats250/trading-system.git
+cd trading-system
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+echo 'alias macro="cd ~/trading-system && git pull && source .venv/bin/activate && python main.py"' >> ~/.bash_profile && source ~/.bash_profile
+```
 
----
-
-oil/
-
-- Energy-specific macro + trade tools
-
----
-
-📊 Macro Pulse Output (v1.0)
-
-Each run produces:
-
-- Timestamp
-- Regime (RISK ON / OFF / MIXED)
-- Primary drivers
-- Cross-asset snapshot
-  - Direction (↑ ↓)
-  - % change
-  - Current price
-- Summary line
-
-Example:
-10Y ↑ +0.54% @ 4.44
-DXY ↑ +0.29% @ 100.19
+Then just type `macro` to update and run.
 
 ---
 
-⚙️ Workflow
+## Structure
 
-- Edit locally in Termux
-- Run script:
-  python main.py
-- Sync changes:
-  sync-macro
-
----
-
-📁 Structure
-
-- "macro/" → Macro Pulse + regime tools
-- "sniper/" → trade setup tools
-- "oil/" → energy-focused analysis
+- `macro/` — Macro Pulse: regime, drivers, incidents
+- `sniper/` — Entry Sniper: EMA/RSI trade setups
+- `oil/` — Energy-specific tools
+- `core/` — Shared utilities (fetcher, formatter, notifier)
+- `config/` — Tickers and settings
+- `outputs/` — HTML dashboard
+- `docs/` — PRD and documentation
+- `archive/` — Old versions
 
 ---
 
-📏 Rules
+## Modules
 
-- Keep repo focused on tools, signals, and macro analysis
-- No financial tracking or tax records here
-- Archive experiments instead of cluttering active tools
+**Macro Pulse** — real-time cross-asset regime scanner
+- Regime: RISK ON / MIXED / RISK OFF
+- Primary + secondary driver detection
+- Incident alerts (rate spikes, oil shocks, vol spikes)
+- Session awareness (Asia / London / NY)
 
----
-
-🏷️ Version
-
-v1.0 — Stable Baseline
-
-- Clean output formatting
-- Notification-ready
-- Auto-sync enabled
-- Mobile optimized
+**Entry Sniper** — ranked trade setup scanner
+- EMA structure (9 / 21 / 50)
+- RSI positioning
+- Setup grades: IDEAL / FALLBACK / NO TRADE
 
 ---
 
-🔄 Next Up
+## Version
 
-- Signal layer (bias per asset)
-- Sniper integration
-- Event-driven alerts
+v2.0 — Modular rebuild with Entry Sniper
