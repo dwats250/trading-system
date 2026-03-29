@@ -14,26 +14,26 @@ python main.py
 
 ## Phone Setup (Termux — first time only)
 
-**Step 1 — Clone and install:**
+**Step 1 — Set up the `laptop` shortcut** (connect to your laptop via SSH):
 ```bash
-git clone https://github.com/dwats250/trading-system.git
-cd trading-system
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+echo 'alias laptop="ssh dustin@192.168.0.69"' >> ~/.bash_profile && source ~/.bash_profile
 ```
 
-**Step 2 — Set up the `macro` shortcut:**
+**Step 2 — Connect to your laptop:**
 ```bash
-echo 'alias macro="cd ~/trading-system && git pull && source .venv/bin/activate && python main.py"' >> ~/.bash_profile && source ~/.bash_profile
+laptop
 ```
 
-**Step 3 — Run it:**
+**Step 3 — Set up the `macro` shortcut** (run once after connecting):
 ```bash
-macro
+echo 'alias macro="cd ~/trading-system && source .venv/bin/activate && python main.py"' >> ~/.bash_profile && source ~/.bash_profile
 ```
 
-After setup, just type `macro` every time to pull latest and run.
+**After setup, daily use is just two commands:**
+```bash
+laptop   # connect to laptop from Termux
+macro    # run the trading system
+```
 
 ---
 
