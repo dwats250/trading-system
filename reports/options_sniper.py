@@ -323,6 +323,9 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
         print("Fetching macro data...", flush=True)
         macro_data = fetch_all(MACRO_SYMBOLS)
 
+    _as_of_raw = next((d["as_of"] for d in macro_data.values() if d and d.get("as_of")), None)
+    data_as_of = f"Prices as of {_as_of_raw}" if _as_of_raw else "Prices as of —"
+
     regime            = classify(macro_data)
     primary, secondary = drivers(macro_data)
     incidents          = detect(macro_data)
@@ -393,7 +396,7 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     # ── Build output ──────────────────────────────────────────
     lines: list[str] = []
     lines.append("OPTIONS SNIPER")
-    lines.append(f"Generated: {now}  |  Market ref: {utc_str}  |  {session} Session")
+    lines.append(f"Generated: {now}  |  Market ref: {utc_str}  |  {data_as_of}  |  {session} Session")
     lines.append(divider("═"))
 
     # Regime

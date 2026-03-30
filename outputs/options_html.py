@@ -570,6 +570,8 @@ def build_options_html(
     now     = _local.strftime("%A, %B %d %Y  —  %I:%M %p %Z")
     utc_str = _utc.strftime("%H:%M UTC")
     session = current_session()
+    _as_of_raw = next((d["as_of"] for d in data_map.values() if d and d.get("as_of")), None)
+    data_as_of = f"Prices as of {_as_of_raw}" if _as_of_raw else "Prices as of —"
     regime   = classify(data_map)
     primary, secondary = drivers(data_map)
     read     = cross_asset_read(data_map)
@@ -641,7 +643,7 @@ def build_options_html(
     <div class="report-header">
         <div>
             <div class="report-title">Options Sniper</div>
-            <div class="report-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {session} Session</div>
+            <div class="report-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session</div>
         </div>
         <div class="regime-block">
             <div class="regime-pill {reg_cls}">{regime}</div>

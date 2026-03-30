@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from urllib.parse import quote
 
@@ -53,7 +53,12 @@ def fetch_symbol(symbol: str) -> Optional[dict]:
 
         pct    = ((price - prev_close) / prev_close) * 100.0
         change = price - prev_close
-        return {"price": float(price), "pct": float(pct), "change": float(change)}
+        market_time = meta.get("regularMarketTime")
+        as_of = (
+            datetime.fromtimestamp(market_time, tz=timezone.utc).strftime("%H:%M UTC")
+            if market_time else None
+        )
+        return {"price": float(price), "pct": float(pct), "change": float(change), "as_of": as_of}
 
     except Exception:
         return None
