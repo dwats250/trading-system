@@ -6,6 +6,7 @@
 - **Phase 2A** — Complete and stable (SHORT-side detection, scoring, invalidation, HTML)
 - **Phase 2B** — Complete and reconciled (trigger conditions on all Tier 2 watchlist entries)
 - **Phase 2C** — Complete (trigger_type backend, rescanner module, run() wiring, scope reconciliation)
+- **Timestamp patch** — Complete (local tz + UTC market ref shown in all three header surfaces)
 
 ---
 
@@ -24,5 +25,15 @@
 ### Deferred
 - Badge surfacing in HTML output (`"Promoted This Cycle"` / `"Lost Validity This Cycle"`) — exists on `CycleResult`, not rendered
 - Near-trigger / Hunt automatic interval switching — currently caller-controlled only
+
+---
+
+## Session classification fix (deferred)
+
+`macro/session.py`: UTC hours 20–23 fall through all branches and return `"After Hours"`. Confirmed root cause of stale "London" display when HTML is generated in that window.
+
+**Deferred pending explicit instruction.** No code changed.
+
+**Decision required:** should 20–21 UTC extend NY session, or should After Hours be surfaced explicitly?
 
 ---

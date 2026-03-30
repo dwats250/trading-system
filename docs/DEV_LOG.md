@@ -2,6 +2,28 @@
 
 ---
 
+## 2026-03-29 — Timestamp clarity patch: local time + UTC in header
+
+### What changed
+- `reports/options_sniper.py`: replaced hardcoded `PST` string with `datetime.now().astimezone()` → `%Z`; added `utc_str = datetime.now(timezone.utc).strftime("%H:%M UTC")`; header line now reads `Generated: [local time TZ]  |  Market ref: [UTC]  |  [session] Session`
+- `outputs/options_html.py`: same local+UTC split; added `from macro.session import current_session`; `report-meta` div now reads `Generated: [local time TZ] · Market ref: [UTC] · [session] Session`
+- `outputs/premarket_html.py`: identical changes to options_html.py
+
+### Why
+Hardcoded `PST` in `strftime` was always wrong for any non-PST host and showed no UTC reference for cross-timezone readers. Session label alone was insufficient to anchor market time unambiguously.
+
+### What was preserved
+- Session classification logic in `macro/session.py` — unchanged
+- All scoring, guardrails, ranking, rendering structure — unchanged
+- `session` variable and label — unchanged, now displayed in all three surfaces
+
+### Files changed
+- `reports/options_sniper.py` — 4-line diff (import timezone, split now/utc_str, update header line)
+- `outputs/options_html.py` — 6-line diff (import timezone + current_session, split now/utc_str/session, update report-meta)
+- `outputs/premarket_html.py` — 6-line diff (same as options_html.py)
+
+---
+
 ## 2026-03-29 — Fix: circular import between options_sniper and rescanner
 
 ### What changed
