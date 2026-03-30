@@ -7,6 +7,7 @@
 - **Phase 2B** — Complete and reconciled (trigger conditions on all Tier 2 watchlist entries)
 - **Phase 2C** — Complete (trigger_type backend, rescanner module, run() wiring, scope reconciliation)
 - **Timestamp patch** — Complete (local tz + UTC market ref shown in all three header surfaces)
+- **Data freshness patch** — Complete (`regularMarketTime` from Yahoo surfaced as "Prices as of HH:MM UTC" in all three header surfaces)
 
 ---
 

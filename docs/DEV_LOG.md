@@ -2,6 +2,31 @@
 
 ---
 
+## 2026-03-29 — Data freshness clarity patch: prices as-of timestamp
+
+### What changed
+- `core/fetcher.py`: added `timezone` to import; `fetch_symbol()` now extracts `meta["regularMarketTime"]` (Unix timestamp) and converts it to `"%H:%M UTC"` string stored as `"as_of"` key in the returned dict; `None` if the field is absent
+- `reports/options_sniper.py`: added `_as_of_raw` extraction after `macro_data` is ready; `data_as_of` string forwarded to report header line — now reads `Generated: ... | Market ref: ... | Prices as of HH:MM UTC | ... Session`
+- `outputs/options_html.py`: same `_as_of_raw` / `data_as_of` extraction in `build_options_html()`; `report-meta` div updated with the new field
+- `outputs/premarket_html.py`: identical changes to `options_html.py`
+
+### Why
+Dashboard showed no indication of when Yahoo last updated the displayed prices. `regularMarketTime` is already in the Yahoo v8 API response — no additional fetch needed. Surfacing it makes stale/previous-session data obvious without changing any price-fetching logic.
+
+### What was preserved
+- Price-fetching logic — unchanged (`fetch_symbol`, `fetch_label`, `fetch_all`)
+- Scoring, guardrails, setup logic — unchanged
+- Session classification — unchanged
+- `as_of` is additive to the return dict; no existing callers break (they access `price`/`pct`/`change` by key)
+
+### Files changed
+- `core/fetcher.py` — 5-line diff (import timezone, extract market_time/as_of, add to return)
+- `reports/options_sniper.py` — 3-line diff (extract data_as_of, extend header line)
+- `outputs/options_html.py` — 3-line diff (extract data_as_of, extend report-meta)
+- `outputs/premarket_html.py` — 3-line diff (same as options_html.py)
+
+---
+
 ## 2026-03-29 — Timestamp clarity patch: local time + UTC in header
 
 ### What changed
