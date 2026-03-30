@@ -18,9 +18,21 @@ def _available() -> bool:
     return SEND_TERMUX_NOTIFICATION and shutil.which("termux-notification") is not None
 
 
+def _is_divider_line(line: str) -> bool:
+    stripped = line.strip()
+    if not stripped:
+        return False
+    return len(set(stripped)) == 1 and stripped[0] in "─═-_"
+
+
 def _build_body(full_text: str, max_lines: int = 12) -> str:
     """Strip the header line and return a compact notification body."""
-    lines = [ln.strip() for ln in full_text.splitlines() if ln.strip()]
+    lines = []
+    for ln in full_text.splitlines():
+        stripped = ln.strip()
+        if not stripped:
+            continue
+        lines.append("  " if _is_divider_line(stripped) else stripped)
     return "\n".join(lines[1:max_lines + 1])
 
 
