@@ -29,7 +29,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 
 from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS
 from core.fetcher import fetch_all
@@ -313,7 +313,10 @@ def _conclusion(ideas: list[TradeIdea], regime: str) -> str:
 # ── Main report builder ───────────────────────────────────────
 
 def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], list[Rejection]]:
-    now     = datetime.now().strftime("%Y-%m-%d  %I:%M %p PST")
+    _local  = datetime.now().astimezone()
+    _utc    = datetime.now(timezone.utc)
+    now     = _local.strftime("%Y-%m-%d  %I:%M %p %Z")
+    utc_str = _utc.strftime("%H:%M UTC")
     session = current_session()
 
     if macro_data is None:
@@ -390,7 +393,7 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     # ── Build output ──────────────────────────────────────────
     lines: list[str] = []
     lines.append("OPTIONS SNIPER")
-    lines.append(f"{now}  |  {session} Session")
+    lines.append(f"Generated: {now}  |  Market ref: {utc_str}  |  {session} Session")
     lines.append(divider("═"))
 
     # Regime

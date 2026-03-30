@@ -5,11 +5,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
+from macro.session import current_session
 from reports.options_sniper import Rejection, TradeIdea
 
 
@@ -564,7 +565,11 @@ def build_options_html(
     rejections: list[Rejection] | None = None,
     chart_data: dict | None = None,
 ) -> str:
-    now = datetime.now().strftime("%A, %B %d %Y  —  %I:%M %p PST")
+    _local  = datetime.now().astimezone()
+    _utc    = datetime.now(timezone.utc)
+    now     = _local.strftime("%A, %B %d %Y  —  %I:%M %p %Z")
+    utc_str = _utc.strftime("%H:%M UTC")
+    session = current_session()
     regime   = classify(data_map)
     primary, secondary = drivers(data_map)
     read     = cross_asset_read(data_map)
@@ -636,7 +641,7 @@ def build_options_html(
     <div class="report-header">
         <div>
             <div class="report-title">Options Sniper</div>
-            <div class="report-meta">{now}</div>
+            <div class="report-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {session} Session</div>
         </div>
         <div class="regime-block">
             <div class="regime-pill {reg_cls}">{regime}</div>
