@@ -10,7 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ── Build ────────────────────────────────────────────────────
+  # ── Build ─────────────────────────────────────────────────
   build:
     runs-on: ubuntu-latest
     permissions:
@@ -30,15 +30,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build dashboard
-        run: python -m dashboard.macro
+      - name: Build all dashboard pages into _site/
+        run: python -m reports.build_all _site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: site/
+          path: _site/
 
-  # ── Deploy ───────────────────────────────────────────────────
+  # ── Deploy ────────────────────────────────────────────────
   deploy:
     needs: build
     runs-on: ubuntu-latest

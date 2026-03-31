@@ -81,28 +81,28 @@ def render_macro_html(
     body {{
       margin: 0;
       padding: 16px;
-      background: #0d1117;
-      color: #c9d1d9;
-      font-family: 'JetBrains Mono', 'Fira Mono', 'Menlo', 'Courier New', monospace;
+      background: #1b1f27;
+      color: #d8dee9;
+      font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
       font-size: 15px;
       line-height: 1.65;
     }}
 
     .card {{
-      background: #161b22;
-      border: 1px solid #30363d;
-      border-radius: 10px;
+      background: #252b36;
+      border: 1px solid #374151;
+      border-radius: 8px;
       padding: 22px 28px;
       max-width: 820px;
       margin: 0 auto;
-      box-shadow: 0 4px 24px rgba(0,0,0,.5);
+      box-shadow: 0 2px 16px rgba(0,0,0,.5);
     }}
 
     .card-title {{
       font-size: 10px;
       letter-spacing: .12em;
       text-transform: uppercase;
-      color: #6e7681;
+      color: #8b93a6;
       margin-bottom: 14px;
     }}
 
@@ -115,20 +115,20 @@ def render_macro_html(
     .footer {{
       margin-top: 18px;
       font-size: 10px;
-      color: #484f58;
-      border-top: 1px solid #21262d;
+      color: #4b5563;
+      border-top: 1px solid #374151;
       padding-top: 10px;
     }}
 
     /* regime */
-    .risk-on  {{ color: #3fb950; font-weight: bold; }}
-    .risk-off {{ color: #f85149; font-weight: bold; }}
-    .mixed    {{ color: #d29922; font-weight: bold; }}
+    .risk-on  {{ color: #98c379; font-weight: bold; }}
+    .risk-off {{ color: #e06c75; font-weight: bold; }}
+    .mixed    {{ color: #e5c07b; font-weight: bold; }}
 
     /* structural */
-    .driver {{ color: #79c0ff; }}
-    .warn   {{ color: #ffa657; }}
-    .div    {{ color: #21262d; }}
+    .driver {{ color: #61afef; }}
+    .warn   {{ color: #e5c07b; }}
+    .div    {{ color: #374151; }}
 
     @media (max-width: 600px) {{
       body  {{ font-size: 13px; padding: 10px; }}

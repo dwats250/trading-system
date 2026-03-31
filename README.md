@@ -68,26 +68,36 @@ premarket   # run full pre-market report
 
 ## GitHub Pages Dashboard
 
-Every push to `main` automatically builds and deploys the macro dashboard to GitHub Pages.
+Every push to `main` automatically builds and deploys the full dashboard suite to GitHub Pages.
 
 **Workflow:** `.github/workflows/deploy-dashboard.yml`
 - Triggers on push to `main` and `workflow_dispatch`
-- `build` job: runs `python -m dashboard.macro`, uploads `site/` as Pages artifact
-- `deploy` job: depends on `build`, deploys artifact via `actions/deploy-pages`
+- `build` job: runs `python -m reports.build_all _site`, uploads `_site/` as Pages artifact
+- `deploy` job: depends on `build`, deploys via `actions/deploy-pages`
 
-**Build locally:**
+**Build locally (all four pages → `reports/output/`):**
 ```bash
-python -m dashboard.macro
+python -m reports.build_all
 ```
-Writes:
-- `artifacts/macro_dashboard.html` — local preview
-- `site/index.html` — Pages deploy target (gitignored, built in CI)
 
-**Hosted URL pattern:**
+**Build to a custom directory:**
+```bash
+python -m reports.build_all _site
+```
+
+**Pages output directory:** `_site/` (gitignored — built by CI, never committed)
+
+**Site pages:**
+- `index.html` — landing hub with links to all reports
+- `macro_pulse.html` — cross-asset regime dashboard
+- `premarket.html` — morning brief + setups
+- `options_sniper.html` — full pipeline + ranked trades
+
+**Hosted URL:**
 ```
 https://dwats250.github.io/trading-system/
 ```
-The exact URL appears under **Settings → Pages** after the first successful deploy.
+Exact URL shown under **Settings → Pages** after first deploy.
 
 **One-time repo setup (manual):**
 Go to **Settings → Pages → Source** and select **GitHub Actions**.

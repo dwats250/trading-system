@@ -22,3 +22,5 @@ __pycache__/
 
 # Generated build output (deployed via GitHub Actions, not committed)
 site/
+_site/
+reports/output/

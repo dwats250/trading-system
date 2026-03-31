@@ -273,31 +273,31 @@ def _sector_rows(data_map: dict, extra: dict) -> str:
 
 _STYLE = """
     :root {
-        --bg: #070f1e;
-        --surface: #0d1b2e;
-        --surface2: #112240;
-        --border: #1e3a5f;
-        --text: #e2eaf8;
-        --muted: #8bafd4;
-        --green: #22c55e;
-        --red: #ef4444;
-        --yellow: #f59e0b;
-        --blue: #60a5fa;
-        --purple: #a78bfa;
-        --shadow: 0 4px 24px rgba(0,0,0,0.4);
+        --bg: #1b1f27;
+        --surface: #252b36;
+        --surface2: #2a3140;
+        --border: #374151;
+        --text: #d8dee9;
+        --muted: #8b93a6;
+        --green: #98c379;
+        --red: #e06c75;
+        --yellow: #e5c07b;
+        --blue: #61afef;
+        --purple: #c678dd;
+        --shadow: 0 2px 16px rgba(0,0,0,0.4);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         background: var(--bg); color: var(--text);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 14px; line-height: 1.5; padding: 16px;
+        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
+        font-size: 14px; line-height: 1.6; padding: 16px;
     }
     .page { max-width: 1000px; margin: 0 auto; }
 
     /* Header */
     .report-header {
-        background: linear-gradient(135deg, #0d1b2e, #112240);
-        border: 1px solid var(--border); border-radius: 16px;
+        background: linear-gradient(135deg, #252b36, #2a3140);
+        border: 1px solid var(--border); border-radius: 10px;
         padding: 20px 24px; margin-bottom: 16px;
         display: flex; justify-content: space-between; align-items: center;
         flex-wrap: wrap; gap: 12px;

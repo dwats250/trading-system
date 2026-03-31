@@ -50,26 +50,25 @@ def _macro_card(label: str, data: dict | None) -> str:
 
 _STYLE = """
         :root {
-            --bg: #081225;
-            --panel: #0f1b33;
-            --panel-2: #14213d;
-            --border: #213455;
-            --text: #e8eefc;
-            --muted: #9fb2d4;
-            --green: #22c55e;
-            --red: #ef4444;
-            --yellow: #f59e0b;
-            --blue: #60a5fa;
-            --incident-bg: rgba(127, 29, 29, 0.95);
-            --incident-border: #b91c1c;
-            --shadow: 0 10px 30px rgba(0,0,0,0.28);
+            --bg: #1b1f27;
+            --panel: #252b36;
+            --panel-2: #2a3140;
+            --border: #374151;
+            --text: #d8dee9;
+            --muted: #8b93a6;
+            --green: #98c379;
+            --red: #e06c75;
+            --yellow: #e5c07b;
+            --blue: #61afef;
+            --incident-bg: rgba(224,108,117,0.12);
+            --incident-border: rgba(224,108,117,0.4);
+            --shadow: 0 2px 16px rgba(0,0,0,0.4);
         }
         * { box-sizing: border-box; }
         body {
             margin: 0; padding: 18px;
-            font-family: Arial, Helvetica, sans-serif;
-            background: radial-gradient(circle at top left, rgba(37,99,235,0.12), transparent 32%),
-                        linear-gradient(180deg, #081225 0%, #07101f 100%);
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
+            background: var(--bg);
             color: var(--text);
         }
         .container { max-width: 1100px; margin: 0 auto; }

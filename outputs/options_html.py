@@ -353,16 +353,16 @@ def _macro_tags(data_map: dict) -> str:
 
 _STYLE = """
     :root {
-        --bg: #060d1a; --surface: #0b1829; --surface2: #0f2035;
-        --border: #1a3356; --text: #dde8f8; --muted: #7a9cc4;
-        --green: #22c55e; --red: #ef4444; --yellow: #f59e0b; --blue: #60a5fa;
-        --gold: #fbbf24; --purple: #a78bfa;
-        --shadow: 0 4px 32px rgba(0,0,0,0.5);
+        --bg: #1b1f27; --surface: #252b36; --surface2: #2a3140;
+        --border: #374151; --text: #d8dee9; --muted: #8b93a6;
+        --green: #98c379; --red: #e06c75; --yellow: #e5c07b; --blue: #61afef;
+        --gold: #e5c07b; --purple: #c678dd;
+        --shadow: 0 2px 16px rgba(0,0,0,0.5);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text);
-           font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-           font-size: 14px; line-height: 1.5; padding: 16px; }
+           font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
+           font-size: 14px; line-height: 1.6; padding: 16px; }
     .page { max-width: 1060px; margin: 0 auto; }
 
     /* Pipeline banner */
@@ -377,8 +377,8 @@ _STYLE = """
 
     /* Header */
     .report-header {
-        background: linear-gradient(135deg, #0b1829, #0f2035);
-        border: 1px solid var(--border); border-radius: 16px;
+        background: linear-gradient(135deg, #252b36, #2a3140);
+        border: 1px solid var(--border); border-radius: 10px;
         padding: 20px 24px; margin-bottom: 16px;
         display: flex; justify-content: space-between; align-items: flex-start;
         flex-wrap: wrap; gap: 16px;
