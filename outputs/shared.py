@@ -54,6 +54,12 @@ SHARED_CSS = """
         background: var(--surface); border: 1px solid var(--border);
         border-radius: 10px; font-size: 0.78rem;
     }
+    .nav-inline {
+        display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+        margin-top: 12px; padding-top: 12px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        font-size: 0.78rem;
+    }
     .nav-brand {
         color: var(--muted); font-weight: 700; letter-spacing: 0.06em;
         text-transform: uppercase; font-size: 0.72rem; margin-right: 10px;
@@ -272,23 +278,45 @@ def nav_bar(active: str = "") -> str:
     )
 
 
+def nav_links(active: str = "") -> str:
+    items = []
+    for href, label, key in _NAV_LINKS:
+        tone = "primary" if key == "premarket" else ("secondary" if key == "options_sniper" else "")
+        cls = "nav-link"
+        if tone:
+            cls += f" {tone}"
+        if active == key:
+            cls += " active"
+        items.append(f'<a href="{href}" class="{cls}">{label}</a>')
+    links_html = ' <span class="nav-sep">·</span> '.join(items)
+    return (
+        f'<div class="nav-inline">'
+        f'<span class="nav-brand">Macro Suite</span>'
+        f'{links_html}'
+        f'</div>'
+    )
+
+
 def report_header(
     title: str,
     meta_line: str,
     regime: str,
     driver_text: str = "",
     note_text: str = "",
+    nav_html: str = "",
 ) -> str:
     """Standard report header: title/meta left, regime pill + driver right."""
     rcls = regime_pill_cls(regime)
     drv  = f'<div class="driver-text">{driver_text}</div>' if driver_text else ""
     note = f'<div class="report-note">{note_text}</div>' if note_text else ""
+    nav  = nav_html if nav_html else ""
     return f"""
     <div class="report-header">
         <div>
             <div class="report-title">{title}</div>
             <div class="report-meta">{meta_line}</div>
             {note}
+            {nav}
         </div>
         <div class="regime-block">
             <div class="regime-pill {rcls}">{regime}</div>

@@ -10,7 +10,7 @@ from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
 from macro.session import current_session
-from outputs.shared import card_block, footer, nav_bar, page_shell, report_header, section_block
+from outputs.shared import card_block, footer, nav_links, page_shell, section_block, stat_block
 from reports.calendar import get_events, get_month_events
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -350,31 +350,39 @@ def _overnight_narrative(data_map: dict, regime: str, primary: str, secondary: s
     return f"{what} {why} {impl}"
 
 
-def _daily_mission_html(regime: str, session: str, primary: str, secondary: str) -> str:
-    """Render the at-a-glance daily context strip below the report header."""
+def _summary_block(
+    now: str,
+    utc_str: str,
+    data_as_of: str,
+    regime: str,
+    session: str,
+    primary: str,
+    secondary: str,
+) -> str:
     safe_regime = _safe_regime(regime)
     safe_session = _safe_session(session)
     safe_primary = _safe_driver(primary)
     safe_secondary = _safe_driver(secondary)
-    regime_cls = _regime_cls(safe_regime)
     plan = _execution_plan(safe_regime)
-    return f"""
-    <div class="daily-mission">
-        <div class="mission-row">
-            <span class="mission-label">Regime</span>
-            <span class="mission-value {regime_cls}">{safe_regime}</span>
-            <span class="mission-sep">·</span>
-            <span class="mission-label">Session</span>
-            <span class="mission-value">{safe_session}</span>
-            <span class="mission-sep">·</span>
-            <span class="mission-label">Primary driver</span>
-            <span class="mission-value">{safe_primary}</span>
-            <span class="mission-sep">·</span>
-            <span class="mission-label">Secondary driver</span>
-            <span class="mission-value">{safe_secondary}</span>
+    regime_cls = _regime_cls(safe_regime)
+    content = f"""
+        <div class="pm-summary-top">
+            <div>
+                <div class="pm-summary-title">Pre-Market Report</div>
+                <div class="pm-summary-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of}</div>
+                {nav_links("premarket")}
+            </div>
+            <div class="regime-pill {regime_cls}">{safe_regime}</div>
         </div>
-        <div class="mission-plan">{plan}</div>
-    </div>"""
+        <div class="stat-grid pm-summary-grid">
+            {stat_block("Session", safe_session)}
+            {stat_block("Regime", safe_regime)}
+            {stat_block("Primary Driver", safe_primary)}
+            {stat_block("Secondary Driver", safe_secondary)}
+            {stat_block("Execution Plan", plan, "pm-plan-block")}
+        </div>
+    """
+    return card_block(content, extra_cls="pm-summary-card")
 
 
 def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list[tuple], list[tuple]]:
@@ -935,20 +943,20 @@ _STYLE = """
     .wl-avoid     { font-size: 0.73rem; color: var(--red); }
     .wl-avoid::before     { content: "Avoid if: "; color: var(--muted); font-style: italic; }
 
-    /* Daily mission strip */
-    .daily-mission {
-        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
-        border-left: 3px solid var(--blue); border-radius: 8px;
-        padding: 12px 16px; margin: 0 0 16px;
+    /* Top summary */
+    .pm-summary-card { margin-bottom: 16px; }
+    .pm-summary-top {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 16px; margin-bottom: 14px;
     }
-    .mission-row {
-        display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
-        font-size: 0.8rem; margin-bottom: 6px;
+    .pm-summary-title {
+        font-size: 1.45rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
     }
-    .mission-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; }
-    .mission-value { font-weight: 700; font-size: 0.82rem; }
-    .mission-sep   { color: var(--border); }
-    .mission-plan  { font-size: 0.88rem; color: var(--text); line-height: 1.5; }
+    .pm-summary-meta {
+        color: var(--muted); font-size: 0.88rem; margin-top: 4px; margin-bottom: 10px;
+    }
+    .pm-summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .pm-plan-block { grid-column: span 2; }
 
     /* Event vol/trade annotation */
     .ev-vol-note   { font-size: 0.72rem; color: var(--yellow); margin-top: 3px; }
@@ -1018,6 +1026,9 @@ _STYLE = """
         .two-col { grid-template-columns: 1fr; }
         .setups-grid { grid-template-columns: 1fr; }
         .sector-cells { flex-direction: column; gap: 4px; }
+        .pm-summary-top { flex-direction: column; }
+        .pm-summary-grid { grid-template-columns: 1fr; }
+        .pm-plan-block { grid-column: auto; }
     }
 """
 
@@ -1068,17 +1079,7 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
     overnight_narrative = _overnight_narrative(data_map, regime, primary, secondary)
 
     body = f"""
-    {nav_bar("premarket")}
-
-    {report_header(
-        title="Pre-Market Report",
-        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session",
-        regime=regime,
-        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
-        note_text="Flagship execution plan: market context, validated top trades, watchlist setups, and embedded Options Context.",
-    )}
-
-    {_daily_mission_html(regime, session, primary, secondary)}
+    {_summary_block(now, utc_str, data_as_of, regime, session, primary, secondary)}
 
     {section_block(
         "Today's Events",

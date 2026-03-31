@@ -1,634 +1,201 @@
 diff --git a/docs/DEV_LOG.md b/docs/DEV_LOG.md
-index 1b266aa..73d61e8 100644
+index 73d61e8..c7f73cb 100644
 --- a/docs/DEV_LOG.md
 +++ b/docs/DEV_LOG.md
-@@ -2,6 +2,39 @@
+@@ -2,6 +2,62 @@
  
  ---
  
-+## 2026-03-31 — Lean Pre-Market robustness pass
++## 2026-03-31 — Pre-Market header sanity fix
 +
 +### What changed
-+- `outputs/premarket_html.py`: tightened fallback handling for the Daily Mission, Events, Overnight Narrative, and Trade Funnel sections so the page keeps rendering cleanly with partial or thin data
-+- `outputs/premarket_html.py`: added safe normalization helpers for missing regime, session, and driver values
-+- `outputs/premarket_html.py`: refined event annotation logic so `HIGH`, `MED`, and `LOW` impact rows always show a volatility note and trade implication
-+- `outputs/premarket_html.py`: upgraded the Trade Funnel to render all tiers independently with explicit empty-state behavior:
-+  - Tier 1 `Validated`
-+  - Tier 2 `Partially Qualified`
-+  - Tier 3 `Watchlist`
-+  - Tier 4 `Rejected`
-+- `outputs/premarket_html.py`: replaced the old compact off-radar line with a proper rejected tier carrying a brief reason
-+- `outputs/premarket_html.py`: added a derived 0–100 watchlist score display from the existing scanner raw score for lightweight comparability only
-+- `outputs/premarket_html.py`: made `build_premarket_html()` accept optional `events` input so the renderer can be exercised without a live calendar fetch
-+- `desktop/test_premarket_fixtures.py`: added five static fixture scenarios covering bullish calm, risk-off spike, major event day, no validated setups, and thin data
++- `outputs/premarket_html.py`: audited the actual Pre-Market render path and confirmed the page was still stacking two top summary surfaces
++- `outputs/premarket_html.py`: replaced the `report_header(...)` + `_daily_mission_html(...)` pair with one consolidated boxed summary block for the Pre-Market page only
++- `outputs/premarket_html.py`: moved `MIXED` regime rendering onto shared `stat_block(...)` cells so it no longer uses the old inline `mission-value` layout path
 +
-+### What was preserved
-+- Report logic and scoring — unchanged
-+- Scanner pipeline and setup generation — unchanged
-+- Options Context embedding — unchanged
-+- Shared page shell and deployment path — unchanged
++### Root cause
++- The prior UI polish pass cleaned up shared header usage, but Pre-Market still rendered its page-local `_daily_mission_html()` directly under the shared header
++- That left two overlapping metadata surfaces on the actual page
++- The `MIXED` label was still emitted by the old `.mission-value` inline row on Pre-Market, not by the aligned stat-cell layout
 +
 +### Verification
-+- `python3 -m py_compile outputs/premarket_html.py desktop/test_premarket_fixtures.py` passed
++- `python3 -m py_compile outputs/premarket_html.py` passed
 +- `python3 desktop/test_premarket_fixtures.py` passed
++- Rebuilt a scoped sanity render to `artifacts/premarket_sanity.html` and confirmed:
++  - `report_header_count=0`
++  - `daily_mission_count=0`
++  - `mission_value_mixed_count=0`
++  - `stat_value_mixed_count=1`
 +
 +### Files changed
 +- `outputs/premarket_html.py`
-+- `desktop/test_premarket_fixtures.py`
 +- `docs/DEV_LOG.md`
 +
 +---
 +
- ## 2026-03-31 — Phase 5: rendering system unification
++## 2026-03-31 — Final UI polish pass
++
++### What changed
++- `outputs/shared.py`: added inline header navigation support via `nav_links()` and `report_header(..., nav_html=...)` so page navigation now lives inside the header zone instead of above it
++- `outputs/premarket_html.py`: removed the standalone top nav strip and integrated navigation into the report header; removed header helper copy while preserving existing content sections
++- `outputs/options_html.py`: removed the standalone top nav strip, removed the supplemental explainer banner and header helper copy, and moved the pipeline bar below the header
++- `outputs/html.py`: consolidated Macro Pulse into one stronger top summary block, removed the redundant header/banner pair, moved `Market Posture` and `What Matters Today` directly below the top block, and switched top metadata to aligned boxed cells
++- `outputs/index_html.py`: removed the loose landing-page tagline/meta strip, removed driver text from the header area, integrated navigation into the main header, and converted the top summary into a compact boxed metadata grid
++
++### What was preserved
++- Report logic and data derivation — unchanged
++- Scanner / scoring / event logic — unchanged
++- Shared theme and deployment path — preserved
++- Existing page roles and section content — preserved outside the scoped layout cleanup
++
++### Verification
++- `python3 -m py_compile outputs/shared.py outputs/html.py outputs/index_html.py outputs/options_html.py outputs/premarket_html.py` passed
++- Searched renderers to confirm standalone top-nav calls and the removed helper copy are no longer used in the affected pages
++
++### Files changed
++- `outputs/shared.py`
++- `outputs/premarket_html.py`
++- `outputs/options_html.py`
++- `outputs/html.py`
++- `outputs/index_html.py`
++- `docs/DEV_LOG.md`
++
++---
++
+ ## 2026-03-31 — Lean Pre-Market robustness pass
  
  ### What changed
 diff --git a/outputs/premarket_html.py b/outputs/premarket_html.py
-index f23937d..f9e1397 100644
+index f9e1397..6442db8 100644
 --- a/outputs/premarket_html.py
 +++ b/outputs/premarket_html.py
-@@ -37,6 +37,52 @@ def _regime_cls(regime: str) -> str:
-     return "regime-mixed"
+@@ -10,7 +10,7 @@ from core.formatter import arrow, fmt_pct, fmt_price
+ from macro.incidents import detect
+ from macro.regime import classify, cross_asset_read, drivers
+ from macro.session import current_session
+-from outputs.shared import card_block, footer, nav_bar, page_shell, report_header, section_block
++from outputs.shared import card_block, footer, nav_links, page_shell, section_block, stat_block
+ from reports.calendar import get_events, get_month_events
+ 
+ # ── Helpers ──────────────────────────────────────────────────
+@@ -350,31 +350,39 @@ def _overnight_narrative(data_map: dict, regime: str, primary: str, secondary: s
+     return f"{what} {why} {impl}"
  
  
-+def _safe_regime(regime: str | None) -> str:
-+    value = (regime or "").strip().upper()
-+    return value if value in {"RISK ON", "RISK OFF", "MIXED"} else "NEUTRAL"
-+
-+
-+def _safe_session(session: str | None) -> str:
-+    value = (session or "").strip()
-+    return value if value else "Unknown session"
-+
-+
-+def _safe_driver(driver: str | None) -> str:
-+    value = (driver or "").strip()
-+    return value if value else "No dominant driver"
-+
-+
-+def _execution_plan(regime: str | None) -> str:
-+    plan_map = {
-+        "RISK ON": "Risk-on -> favor calls or long breakouts, size normally when structure is clean.",
-+        "RISK OFF": "Risk-off -> favor puts or defensive shorts, reduce size and respect failed bounces.",
-+        "MIXED": "Mixed regime -> stay selective, wait for confirmation, keep risk tight.",
-+    }
-+    return plan_map.get(_safe_regime(regime), "Neutral / Mixed - stay reactive")
-+
-+
-+def _setup_score_pct(setup) -> int:
-+    raw = max(0, min(int(getattr(setup, "score", 0) or 0), 6))
-+    return round((raw / 6) * 100)
-+
-+
-+def _rejected_reasons(setup, failures: list[str]) -> list[str]:
-+    reasons = list(failures)
-+    if getattr(setup, "grade", "") == "C":
-+        reasons.append("Chart quality below tradeable threshold")
-+    if getattr(setup, "setup_type", "") == "none":
-+        reasons.append("No clear setup structure")
-+    if getattr(setup, "bias", "") == "NEUTRAL":
-+        reasons.append("Directional bias is mixed / indecisive")
-+    deduped = []
-+    seen = set()
-+    for reason in reasons:
-+        if reason not in seen:
-+            deduped.append(reason)
-+            seen.add(reason)
-+    return deduped or ["Failed setup qualification"]
-+
-+
- # ── Section builders ─────────────────────────────────────────
- 
- def _futures_cards(data_map: dict) -> str:
-@@ -93,14 +139,21 @@ def _calendar_rows(events: list[dict]) -> str:
-         return '<tr><td colspan="4" class="no-events">No major events today</td></tr>'
-     rows = []
-     for e in events:
--        impact_cls = "impact-high" if e["impact"] == "HIGH" else "impact-med"
-+        impact = e.get("impact", "LOW")
-+        impact_cls = "impact-high" if impact == "HIGH" else ("impact-med" if impact == "MED" else "impact-low")
-         url = e.get("url", "#")
-+        vol = _vol_note(e)
-+        trade = _trade_implication(e)
-         rows.append(f"""
-         <tr>
--            <td class="ev-time">{e['time']} UTC</td>
--            <td><span class="impact-badge {impact_cls}">{e['impact']}</span></td>
--            <td class="ev-name"><a href="{url}" target="_blank" rel="noopener">{e['event']}</a></td>
--            <td class="ev-est">{e['consensus']}</td>
-+            <td class="ev-time">{e.get('time', '--:--')} UTC</td>
-+            <td><span class="impact-badge {impact_cls}">{impact}</span></td>
-+            <td class="ev-name">
-+                <a href="{url}" target="_blank" rel="noopener">{e.get('event', e.get('name', 'Unnamed event'))}</a>
-+                <div class="ev-vol-note">{vol}</div>
-+                <div class="ev-trade-note">{trade}</div>
-+            </td>
-+            <td class="ev-est">{e.get('consensus', '—')}</td>
-         </tr>""")
-     return "".join(rows)
- 
-@@ -219,21 +272,137 @@ def _wl_avoid(s) -> str:
-     return "Structure invalidates before entry"
- 
- 
--def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list]:
-+def _vol_note(event: dict) -> str:
-+    """Derive volatility expectation from event name and impact."""
-+    name   = (event.get("event") or event.get("name") or "").upper()
-+    impact = event.get("impact", "LOW")
-+    if impact == "HIGH":
-+        keywords = {
-+            "CPI":        "Inflation print — sharp DXY and rate-sensitive reaction expected",
-+            "PCE":        "Fed's preferred inflation gauge — rate and equity sensitivity",
-+            "PPI":        "Producer prices — precursor to CPI; high directional risk",
-+            "FOMC":       "Fed decision — potentially the largest mover of the session",
-+            "POWELL":     "Fed commentary — watch for policy shift signals",
-+            "NFP":        "Jobs report — broad market volatility across all asset classes",
-+            "EMPLOYMENT": "Labor data — rate and equity sensitivity",
-+            "NONFARM":    "Jobs report — broad market volatility across all asset classes",
-+            "GDP":        "Growth data — risk-on / risk-off tone setter",
-+            "PMI":        "Activity data — moderate to high cross-asset impact",
-+            "RETAIL":     "Consumer spending — moderate equity and rate impact",
-+            "HOUSING":    "Rate-sensitive sectors at risk",
-+            "INFLATION":  "Inflation data — DXY and bond market reaction likely",
-+        }
-+        for key, note in keywords.items():
-+            if key in name:
-+                return note
-+        return "High-impact release — expect elevated intraday volatility"
-+    if impact == "MED":
-+        return "Expect moderate volatility"
-+    return "Minimal impact expected"
-+
-+
-+def _trade_implication(event: dict) -> str:
-+    """Derive trade implication from event — conservative, no fabrication."""
-+    impact = event.get("impact", "LOW")
-+    name   = (event.get("event") or event.get("name") or "").upper()
-+    if impact == "HIGH":
-+        return "Avoid new positions within 30 min of release — let price react first"
-+    if impact == "MED":
-+        return "Expect moderate volatility"
-+    if "PMI"     in name: return "May shift intraday directional bias if significantly off consensus"
-+    if "RETAIL"  in name: return "Consumer-facing sectors may react"
-+    if "HOUSING" in name: return "Rate-sensitive sectors at risk"
-+    return "Minimal impact expected"
-+
-+
-+def _overnight_narrative(data_map: dict, regime: str, primary: str, secondary: str) -> str:
-+    """Generate structured overnight commentary from existing pipeline data."""
-+    futures_items = [("ES", "S&P futures"), ("NQ", "Nasdaq futures"), ("RTY", "Russell")]
-+    best_label, best_name, best_pct = None, None, 0.0
-+    for label, name in futures_items:
-+        d = data_map.get(label)
-+        if d and abs(d["pct"]) > abs(best_pct):
-+            best_pct  = d["pct"]
-+            best_label, best_name = label, name
-+
-+    safe_primary = _safe_driver(primary)
-+    safe_secondary = _safe_driver(secondary)
-+    safe_regime = _safe_regime(regime)
-+    if not best_label or abs(best_pct) < 0.05:
-+        return "Overnight action mixed, no clear directional signal. No dominant driver is firmly in control. Stay reactive into the open."
-+
-+    what = f"{best_name} {'led higher' if best_pct > 0 else 'led lower'} by {abs(best_pct):.1f}% overnight."
-+    if safe_secondary != safe_primary:
-+        why = f"Primary driver is {safe_primary.lower()}, with {safe_secondary.lower()} also influencing tone."
-+    else:
-+        why = f"Primary driver is {safe_primary.lower()}."
-+
-+    impl_map = {
-+        "RISK ON": "Implication for the open: continuation is possible, but only if breadth confirms.",
-+        "RISK OFF": "Implication for the open: defensive positioning matters more than chasing longs.",
-+        "MIXED": "Implication for the open: treat the first 30 minutes as a direction test.",
-+        "NEUTRAL": "Implication for the open: stay reactive until price picks a side.",
-+    }
-+    vix_d = data_map.get("VIX")
-+    impl = "VIX spiking — hedge exposure and reduce size." if (vix_d and vix_d["pct"] > 5) \
-+           else impl_map.get(safe_regime, impl_map["NEUTRAL"])
-+
-+    return f"{what} {why} {impl}"
-+
-+
-+def _daily_mission_html(regime: str, session: str, primary: str, secondary: str) -> str:
-+    """Render the at-a-glance daily context strip below the report header."""
-+    safe_regime = _safe_regime(regime)
-+    safe_session = _safe_session(session)
-+    safe_primary = _safe_driver(primary)
-+    safe_secondary = _safe_driver(secondary)
+-def _daily_mission_html(regime: str, session: str, primary: str, secondary: str) -> str:
+-    """Render the at-a-glance daily context strip below the report header."""
++def _summary_block(
++    now: str,
++    utc_str: str,
++    data_as_of: str,
++    regime: str,
++    session: str,
++    primary: str,
++    secondary: str,
++) -> str:
+     safe_regime = _safe_regime(regime)
+     safe_session = _safe_session(session)
+     safe_primary = _safe_driver(primary)
+     safe_secondary = _safe_driver(secondary)
+-    regime_cls = _regime_cls(safe_regime)
+     plan = _execution_plan(safe_regime)
+-    return f"""
+-    <div class="daily-mission">
+-        <div class="mission-row">
+-            <span class="mission-label">Regime</span>
+-            <span class="mission-value {regime_cls}">{safe_regime}</span>
+-            <span class="mission-sep">·</span>
+-            <span class="mission-label">Session</span>
+-            <span class="mission-value">{safe_session}</span>
+-            <span class="mission-sep">·</span>
+-            <span class="mission-label">Primary driver</span>
+-            <span class="mission-value">{safe_primary}</span>
+-            <span class="mission-sep">·</span>
+-            <span class="mission-label">Secondary driver</span>
+-            <span class="mission-value">{safe_secondary}</span>
 +    regime_cls = _regime_cls(safe_regime)
-+    plan = _execution_plan(safe_regime)
-+    return f"""
-+    <div class="daily-mission">
-+        <div class="mission-row">
-+            <span class="mission-label">Regime</span>
-+            <span class="mission-value {regime_cls}">{safe_regime}</span>
-+            <span class="mission-sep">·</span>
-+            <span class="mission-label">Session</span>
-+            <span class="mission-value">{safe_session}</span>
-+            <span class="mission-sep">·</span>
-+            <span class="mission-label">Primary driver</span>
-+            <span class="mission-value">{safe_primary}</span>
-+            <span class="mission-sep">·</span>
-+            <span class="mission-label">Secondary driver</span>
-+            <span class="mission-value">{safe_secondary}</span>
++    content = f"""
++        <div class="pm-summary-top">
++            <div>
++                <div class="pm-summary-title">Pre-Market Report</div>
++                <div class="pm-summary-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of}</div>
++                {nav_links("premarket")}
++            </div>
++            <div class="regime-pill {regime_cls}">{safe_regime}</div>
+         </div>
+-        <div class="mission-plan">{plan}</div>
+-    </div>"""
++        <div class="stat-grid pm-summary-grid">
++            {stat_block("Session", safe_session)}
++            {stat_block("Regime", safe_regime)}
++            {stat_block("Primary Driver", safe_primary)}
++            {stat_block("Secondary Driver", safe_secondary)}
++            {stat_block("Execution Plan", plan, "pm-plan-block")}
 +        </div>
-+        <div class="mission-plan">{plan}</div>
-+    </div>"""
-+
-+
-+def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list[tuple], list[tuple]]:
 +    """
-+    Four-tier partition:
-+      validated — all structural guardrails pass; actionable
-+      partial   — exactly 1 guardrail fails; specific upgrade trigger exists
-+      watchlist — 2+ guardrail failures; broader monitoring
-+      rejected  — failed qualification; not actionable
-+    """
-     validated = []
-+    partial   = []
-     watchlist = []
--    off_radar = []
-+    rejected  = []
- 
-     for s in setups:
-         failures = _structural_guardrails(s, regime)
-         if not failures:
-             validated.append(s)
-         elif s.grade in ("A", "B") and s.setup_type != "none":
--            watchlist.append((s, failures))
-+            if len(failures) == 1:
-+                partial.append((s, failures))
-+            else:
-+                watchlist.append((s, failures))
-         else:
--            off_radar.append(s)
-+            rejected.append((s, _rejected_reasons(s, failures)))
- 
--    return validated, watchlist, off_radar
-+    return validated, partial, watchlist, rejected
++    return card_block(content, extra_cls="pm-summary-card")
  
  
- def _expiry_band(s, opts) -> str:
-@@ -321,24 +490,26 @@ def _options_context_html(s, opts) -> str:
- 
- def _setup_cards(setups: list, regime: str, options_map: dict[str, object] | None = None) -> str:
-     """
--    Three-tier presentation:
--      1. Validated Top Trades     — passed all structural guardrails, actionable
--      2. Watchlist Setups         — grade A/B with identifiable structure, but one
--                                    guardrail blocks execution; shows primary blocker
--      3. Not on radar             — grade C or no structure; compact list only
-+    Four-tier presentation:
-+      1. Validated Top Trades      — all structural guardrails pass; actionable
-+      2. Partially Qualified       — exactly 1 guardrail blocking; specific trigger to upgrade
-+      3. Watchlist Setups          — 2+ guardrail issues; broader monitoring
-+      4. Rejected                  — failed qualification; compact reason only
- 
-     No setup may appear in tier 1 unless it passes every structural guardrail.
-+    Each tier is in its own block; only tier 1 uses the card grid.
-     """
-     options_map = options_map or {}
--    validated, watchlist, off_radar = _partition_setups(setups, regime)
-+    validated, partial, watchlist, rejected = _partition_setups(setups, regime)
- 
-     bias_cls_map  = {"LONG": "bias-long", "SHORT": "bias-short"}
-     grade_cls_map = {"A": "grade-a", "B": "grade-b", "C": "grade-c"}
-     html = ""
- 
--    # ── Tier 1: Validated Top Trades ──────────────────────────
-+    # ── Tier 1: Validated Top Trades (card grid) ──────────────
-+    html += '<div class="setups-grid">'
-     if not validated:
--        html += '<div class="no-setups">No validated trades today — stay flat or wait</div>'
-+        html += '<div class="no-setups">No validated setups today</div>'
-     else:
-         for s in validated[:3]:
-             bias_cls  = bias_cls_map.get(s.bias, "bias-neutral")
-@@ -400,12 +571,45 @@ def _setup_cards(setups: list, regime: str, options_map: dict[str, object] | Non
- 
-                 {_options_context_html(s, options_map.get(s.ticker))}
-             </div>"""
-+    html += '</div>'  # close setups-grid
-+
-+    # ── Tier 2: Partially Qualified — one trigger away ─────────
-+    if partial:
-+        html += """
-+        <div class="partial-section-label">Partially Qualified — One Trigger Away</div>
-+        <div class="partial-section-note">Structure is valid and one guardrail is blocking. Know the exact condition required to trade.</div>"""
-+        for s, failures in partial[:4]:
-+            bias_cls     = bias_cls_map.get(s.bias, "bias-neutral")
-+            disqualifier = _primary_disqualifier(failures)
-+            working      = _confirms_note(s)
-+            trigger      = _wl_upgrades(failures, s)
-+            atr          = getattr(s, "atr", None)
-+            atr_kv       = f'<span class="wl-kv"><span class="wl-k">ATR</span><span class="wl-v">{fmt_price(atr)}</span></span>' if atr else ""
-+            html += f"""
-+            <div class="partial-card {bias_cls}">
-+                <div class="partial-header">
-+                    <span class="watchlist-ticker">{s.ticker}</span>
-+                    <span class="setup-bias {bias_cls}" style="font-size:0.72rem;padding:1px 7px">{s.bias}</span>
-+                    <span class="watchlist-grade grade-{s.grade.lower()}">{s.grade}</span>
-+                    <span class="watchlist-setup-type">{s.setup_type.replace("_", " ")}</span>
-+                    <span class="partial-rr">R:R {s.rr:.1f}:1</span>
-+                </div>
-+                <div class="partial-kv-row">
-+                    <span class="wl-kv"><span class="wl-k">Price</span><span class="wl-v">{s.price}</span></span>
-+                    <span class="wl-kv"><span class="wl-k">Support</span><span class="wl-v">{s.support}</span></span>
-+                    <span class="wl-kv"><span class="wl-k">Resistance</span><span class="wl-v">{s.resistance}</span></span>
-+                    {atr_kv}
-+                </div>
-+                <div class="partial-working">{working}</div>
-+                <div class="partial-missing">{disqualifier}</div>
-+                <div class="partial-trigger">{trigger}</div>
-+            </div>"""
- 
--    # ── Tier 2: Watchlist — Good Structure, Not Trade-Ready ───
-+    # ── Tier 3: Watchlist — Broader Monitoring ─────────────────
-     if watchlist:
-         html += """
-         <div class="watchlist-label">Watchlist Setups — Good Structure, Not Trade-Ready</div>
--        <div class="watchlist-note">Chart structure is identifiable but at least one guardrail blocks execution. Monitor only.</div>"""
-+        <div class="watchlist-note">Multiple guardrails blocking. Monitor only — do not force entry.</div>"""
-         for s, reasons in watchlist[:5]:
-             bias_cls     = bias_cls_map.get(s.bias, "bias-neutral")
-             disqualifier = _primary_disqualifier(reasons)
-@@ -418,6 +622,7 @@ def _setup_cards(setups: list, regime: str, options_map: dict[str, object] | Non
-                     <span class="setup-bias {bias_cls}" style="font-size:0.72rem;padding:1px 7px">{s.bias}</span>
-                     <span class="watchlist-grade grade-{s.grade.lower()}">{s.grade}</span>
-                     <span class="watchlist-setup-type">{s.setup_type.replace("_", " ")}</span>
-+                    <span class="watchlist-score">Score {_setup_score_pct(s)}</span>
-                 </div>
-                 <div class="watchlist-blocker">Why not trading: {disqualifier}</div>
-                 <div class="watchlist-context">
-@@ -434,11 +639,27 @@ def _setup_cards(setups: list, regime: str, options_map: dict[str, object] | Non
-                     <div class="wl-avoid">{_wl_avoid(s)}</div>
-                 </div>
-             </div>"""
-+    else:
-+        html += """
-+        <div class="watchlist-label">Watchlist Setups — Good Structure, Not Trade-Ready</div>
-+        <div class="watchlist-note">No watchlist candidates</div>"""
- 
--    # ── Tier 3: Off radar ─────────────────────────────────────
--    if off_radar:
--        tickers = ", ".join(s.ticker for s in off_radar)
--        html += f'<div class="off-radar">Not on radar (weak chart / no structure): {tickers}</div>'
-+    # ── Tier 4: Rejected ──────────────────────────────────────
-+    if rejected:
-+        html += """
-+        <div class="rejected-label">Rejected — Failed Qualification</div>
-+        <div class="rejected-note">Not actionable today. Keep the reason short and explicit.</div>"""
-+        for s, reasons in rejected[:6]:
-+            brief = reasons[0] if reasons else "Failed qualification"
-+            html += f"""
-+            <div class="rejected-card">
-+                <div class="rejected-row">
-+                    <span class="watchlist-ticker">{s.ticker}</span>
-+                    <span class="watchlist-grade grade-{s.grade.lower()}">{s.grade}</span>
-+                    <span class="watchlist-setup-type">{s.setup_type.replace("_", " ")}</span>
-+                </div>
-+                <div class="rejected-reason">{brief}</div>
-+            </div>"""
- 
-     return html
- 
-@@ -526,6 +747,7 @@ _STYLE = """
-     .impact-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; }
-     .impact-high { background: rgba(224,108,117,0.2); color: #e89099; }
-     .impact-med  { background: rgba(97,175,239,0.15); color: #93c5fd; }
-+    .impact-low  { background: rgba(139,147,166,0.12); color: #a3a8b4; }
-     .no-events   { color: var(--muted); padding: 12px 0; text-align: center; }
-     .ev-date-header { background: rgba(30,58,95,0.4); color: var(--muted);
-                       font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-@@ -575,12 +797,13 @@ _STYLE = """
-     .watchlist-ticker { font-weight: 700; font-size: 0.88rem; color: var(--muted); }
-     .watchlist-grade  { font-size: 0.72rem; margin-left: auto; padding: 1px 7px;
-                         border-radius: 4px; }
-+    .watchlist-score {
-+        font-size: 0.68rem; color: var(--muted);
-+        padding: 1px 6px; border-radius: 4px;
-+        border: 1px solid rgba(55,65,81,0.4);
-+    }
-     .watchlist-blocker { font-size: 0.75rem; color: var(--muted); }
-     .watchlist-blocker::before { content: "↳ "; color: var(--border); }
--    /* Off-radar — minimal, no card treatment */
--    .off-radar {
--        margin-top: 10px; font-size: 0.72rem; color: #4b5563; font-style: italic;
--    }
-     .setup-row { display: flex; gap: 16px; margin-bottom: 6px; }
-     .setup-stat { font-size: 0.85rem; color: var(--muted); }
-     .setup-stat strong { color: var(--text); }
-@@ -712,6 +935,84 @@ _STYLE = """
+ def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list[tuple], list[tuple]]:
+@@ -935,20 +943,20 @@ _STYLE = """
      .wl-avoid     { font-size: 0.73rem; color: var(--red); }
      .wl-avoid::before     { content: "Avoid if: "; color: var(--muted); font-style: italic; }
  
-+    /* Daily mission strip */
-+    .daily-mission {
-+        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
-+        border-left: 3px solid var(--blue); border-radius: 8px;
-+        padding: 12px 16px; margin: 0 0 16px;
+-    /* Daily mission strip */
+-    .daily-mission {
+-        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
+-        border-left: 3px solid var(--blue); border-radius: 8px;
+-        padding: 12px 16px; margin: 0 0 16px;
++    /* Top summary */
++    .pm-summary-card { margin-bottom: 16px; }
++    .pm-summary-top {
++        display: flex; justify-content: space-between; align-items: flex-start;
++        gap: 16px; margin-bottom: 14px;
 +    }
-+    .mission-row {
-+        display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
-+        font-size: 0.8rem; margin-bottom: 6px;
-+    }
-+    .mission-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; }
-+    .mission-value { font-weight: 700; font-size: 0.82rem; }
-+    .mission-sep   { color: var(--border); }
-+    .mission-plan  { font-size: 0.88rem; color: var(--text); line-height: 1.5; }
-+
-+    /* Event vol/trade annotation */
-+    .ev-vol-note   { font-size: 0.72rem; color: var(--yellow); margin-top: 3px; }
-+    .ev-trade-note { font-size: 0.70rem; color: #6b7280; margin-top: 1px; }
-+
-+    /* Overnight narrative */
-+    .overnight-narrative {
-+        margin-top: 12px; padding: 10px 14px;
-+        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
-+        border-radius: 8px; font-size: 0.88rem; color: var(--muted); line-height: 1.6;
-+    }
-+
-+    /* Section subtitle */
-+    .section-subtitle { font-size: 0.8rem; color: var(--muted); margin-bottom: 8px; }
-+
-+    /* Partially Qualified tier */
-+    .partial-section-label {
-+        margin-top: 20px; padding: 6px 0 2px;
-+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-+        letter-spacing: 0.1em; color: var(--yellow);
-+        border-top: 1px dashed rgba(229,192,123,0.3);
-+    }
-+    .partial-section-note { font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; font-style: italic; }
-+    .partial-card {
-+        background: var(--surface); border: 1px solid var(--border);
-+        border-left: 3px solid rgba(229,192,123,0.4);
-+        border-radius: 6px; padding: 8px 12px; margin-bottom: 5px;
-+    }
-+    .partial-card.bias-long  { border-left-color: rgba(152,195,121,0.45); }
-+    .partial-card.bias-short { border-left-color: rgba(224,108,117,0.45); }
-+    .partial-header { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-+    .partial-rr     { margin-left: auto; font-size: 0.72rem; color: var(--muted); }
-+    .partial-kv-row { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-bottom: 5px; }
-+    .partial-working {
-+        font-size: 0.75rem; color: var(--green); margin-bottom: 2px;
-+    }
-+    .partial-working::before { content: "✓  Working: "; color: var(--muted); }
-+    .partial-missing {
-+        font-size: 0.75rem; color: var(--red); margin-bottom: 2px;
-+    }
-+    .partial-missing::before { content: "✗  Missing: "; color: var(--muted); }
-+    .partial-trigger {
-+        font-size: 0.78rem; color: var(--blue); font-weight: 600; margin-top: 4px;
-+    }
-+    .partial-trigger::before { content: "⟶  Trade when: "; color: var(--muted); font-weight: normal; }
-+
-+    /* Rejected tier */
-+    .rejected-label {
-+        margin-top: 20px; padding: 6px 0 2px;
-+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
-+        letter-spacing: 0.1em; color: #8b93a6;
-+        border-top: 1px dashed rgba(107,114,128,0.35);
-+    }
-+    .rejected-note {
-+        font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; font-style: italic;
-+    }
-+    .rejected-card {
-+        background: rgba(255,255,255,0.02); border: 1px solid rgba(55,65,81,0.45);
-+        border-radius: 6px; padding: 8px 12px; margin-bottom: 5px;
-+    }
-+    .rejected-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
-+    .rejected-reason { font-size: 0.75rem; color: var(--muted); }
-+    .rejected-reason::before { content: "Rejected: "; color: #8b93a6; }
-+
-     @media (max-width: 640px) {
-         .futures-grid { grid-template-columns: 1fr; }
++    .pm-summary-title {
++        font-size: 1.45rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
+     }
+-    .mission-row {
+-        display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
+-        font-size: 0.8rem; margin-bottom: 6px;
++    .pm-summary-meta {
++        color: var(--muted); font-size: 0.88rem; margin-top: 4px; margin-bottom: 10px;
+     }
+-    .mission-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; }
+-    .mission-value { font-weight: 700; font-size: 0.82rem; }
+-    .mission-sep   { color: var(--border); }
+-    .mission-plan  { font-size: 0.88rem; color: var(--text); line-height: 1.5; }
++    .pm-summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
++    .pm-plan-block { grid-column: span 2; }
+ 
+     /* Event vol/trade annotation */
+     .ev-vol-note   { font-size: 0.72rem; color: var(--yellow); margin-top: 3px; }
+@@ -1018,6 +1026,9 @@ _STYLE = """
          .two-col { grid-template-columns: 1fr; }
-@@ -725,6 +1026,7 @@ _STYLE = """
+         .setups-grid { grid-template-columns: 1fr; }
+         .sector-cells { flex-direction: column; gap: 4px; }
++        .pm-summary-top { flex-direction: column; }
++        .pm-summary-grid { grid-template-columns: 1fr; }
++        .pm-plan-block { grid-column: auto; }
+     }
+ """
  
- def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None,
-                          month_events: list | None = None,
-+                         events: list | None = None,
-                          options_map: dict[str, object] | None = None) -> str:
-     if extra is None:
-         extra = {}
-@@ -737,14 +1039,17 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
-     _utc    = datetime.now(timezone.utc)
-     now     = _local.strftime("%A, %B %d %Y  —  %I:%M %p %Z")
-     utc_str = _utc.strftime("%H:%M UTC")
--    session = current_session()
-+    session = _safe_session(current_session())
-     _as_of_raw = next((d["as_of"] for d in data_map.values() if d and d.get("as_of")), None)
-     data_as_of = f"Prices as of {_as_of_raw}" if _as_of_raw else "Prices as of —"
--    regime = classify(data_map)
--    primary, secondary = drivers(data_map)
-+    regime = _safe_regime(classify(data_map))
-+    primary_raw, secondary_raw = drivers(data_map)
-+    primary = _safe_driver(primary_raw)
-+    secondary = _safe_driver(secondary_raw)
-     incidents = detect(data_map)
-     read = cross_asset_read(data_map)
--    events = get_events()
-+    if events is None:
-+        events = get_events()
- 
-     regime_cls = _regime_cls(regime)
- 
-@@ -758,7 +1063,9 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
-         "RISK OFF": "⚠ RISK OFF — reduce size, favor shorts or cash",
-         "MIXED":    "~ Mixed environment — be selective",
-         "RISK ON":  "✓ RISK ON — favorable for long setups",
--    }.get(regime, regime)
-+    }.get(regime, "Mixed / indecisive — stay reactive")
-+
-+    overnight_narrative = _overnight_narrative(data_map, regime, primary, secondary)
+@@ -1068,17 +1079,7 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
+     overnight_narrative = _overnight_narrative(data_map, regime, primary, secondary)
  
      body = f"""
-     {nav_bar("premarket")}
-@@ -771,37 +1078,42 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
-         note_text="Flagship execution plan: market context, validated top trades, watchlist setups, and embedded Options Context.",
-     )}
- 
--    {section_block("Overnight Futures", f'<div class="futures-grid">{_futures_cards(data_map)}</div>')}
+-    {nav_bar("premarket")}
 -
--    <div class="two-col">
--        {section_block(
--            "Macro Snapshot",
--            card_block(
--                f'<table class="macro-table">{_macro_rows(data_map)}</table>'
--                f'<div class="summary-box">{read}</div>'
--            ),
--        )}
+-    {report_header(
+-        title="Pre-Market Report",
+-        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session",
+-        regime=regime,
+-        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
+-        note_text="Flagship execution plan: market context, validated top trades, watchlist setups, and embedded Options Context.",
+-    )}
 -
--        {section_block(
--            "Today's Events",
--            card_block(
--                f'{incident_html}'
--                f'<table class="cal-table">{_calendar_rows(events)}</table>'
--                f'<div class="summary-box">Primary: {primary}<br>Secondary: {secondary}</div>'
--            ),
--        )}
--    </div>
-+    {_daily_mission_html(regime, session, primary, secondary)}
+-    {_daily_mission_html(regime, session, primary, secondary)}
++    {_summary_block(now, utc_str, data_as_of, regime, session, primary, secondary)}
  
      {section_block(
--        "Upcoming This Month — High Impact Only",
--        card_block(f'<table class="cal-table">{_upcoming_rows(month_events)}</table>'),
-+        "Today's Events",
-+        card_block(
-+            f'{incident_html}'
-+            f'<table class="cal-table">{_calendar_rows(events)}</table>'
-+        ),
-     )}
- 
-     {section_block(
--        "Validated Top Trades",
--        f'<div class="section-subtitle">Structural guardrails with compact options context</div>'
-+        "Overnight Futures & Cross-Asset Read",
-+        f'<div class="futures-grid">{_futures_cards(data_map)}</div>'
-+        f'<div class="overnight-narrative">{overnight_narrative}</div>',
-+    )}
-+
-+    {section_block(
-+        "Macro Snapshot",
-+        card_block(
-+            f'<table class="macro-table">{_macro_rows(data_map)}</table>'
-+            f'<div class="summary-box">{read}</div>'
-+            f'<div class="summary-box" style="margin-top:6px;font-size:0.82rem">'
-+            f'Primary: {primary} &nbsp;·&nbsp; Secondary: {secondary}</div>'
-+        ),
-+    )}
-+
-+    {section_block(
-+        "Trade Funnel",
-+        f'<div class="section-subtitle">Validated → Partially Qualified → Watchlist → Rejected</div>'
-         f'<div class="regime-note {regime_note_cls}">{regime_note_text}</div>'
--        f'<div class="setups-grid">{_setup_cards(setups, regime, options_map)}</div>',
-+        f'{_setup_cards(setups, regime, options_map)}',
-+    )}
-+
-+    {section_block(
-+        "Upcoming This Month — High Impact Only",
-+        card_block(f'<table class="cal-table">{_upcoming_rows(month_events)}</table>'),
-     )}
- 
-     {section_block(
-@@ -835,8 +1147,8 @@ def save(path: str = "premarket.html", data_map: dict | None = None,
-     if month_events is None:
-         month_events = get_month_events()
- 
--    regime = classify(data_map)
--    validated, _, _ = _partition_setups(setups, regime)
-+    regime = _safe_regime(classify(data_map))
-+    validated, _, _, _ = _partition_setups(setups, regime)
-     options_map = {}
-     try:
-         from options.chain import analyze
-@@ -847,7 +1159,7 @@ def save(path: str = "premarket.html", data_map: dict | None = None,
-     except Exception:
-         options_map = {}
- 
--    html = build_premarket_html(data_map, setups, extra, month_events, options_map)
-+    html = build_premarket_html(data_map, setups, extra, month_events, None, options_map)
-     with open(path, "w", encoding="utf-8") as f:
-         f.write(html)
-     print(f"HTML saved → {path}")
+         "Today's Events",

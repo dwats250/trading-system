@@ -2,6 +2,62 @@
 
 ---
 
+## 2026-03-31 — Pre-Market header sanity fix
+
+### What changed
+- `outputs/premarket_html.py`: audited the actual Pre-Market render path and confirmed the page was still stacking two top summary surfaces
+- `outputs/premarket_html.py`: replaced the `report_header(...)` + `_daily_mission_html(...)` pair with one consolidated boxed summary block for the Pre-Market page only
+- `outputs/premarket_html.py`: moved `MIXED` regime rendering onto shared `stat_block(...)` cells so it no longer uses the old inline `mission-value` layout path
+
+### Root cause
+- The prior UI polish pass cleaned up shared header usage, but Pre-Market still rendered its page-local `_daily_mission_html()` directly under the shared header
+- That left two overlapping metadata surfaces on the actual page
+- The `MIXED` label was still emitted by the old `.mission-value` inline row on Pre-Market, not by the aligned stat-cell layout
+
+### Verification
+- `python3 -m py_compile outputs/premarket_html.py` passed
+- `python3 desktop/test_premarket_fixtures.py` passed
+- Rebuilt a scoped sanity render to `artifacts/premarket_sanity.html` and confirmed:
+  - `report_header_count=0`
+  - `daily_mission_count=0`
+  - `mission_value_mixed_count=0`
+  - `stat_value_mixed_count=1`
+
+### Files changed
+- `outputs/premarket_html.py`
+- `docs/DEV_LOG.md`
+
+---
+
+## 2026-03-31 — Final UI polish pass
+
+### What changed
+- `outputs/shared.py`: added inline header navigation support via `nav_links()` and `report_header(..., nav_html=...)` so page navigation now lives inside the header zone instead of above it
+- `outputs/premarket_html.py`: removed the standalone top nav strip and integrated navigation into the report header; removed header helper copy while preserving existing content sections
+- `outputs/options_html.py`: removed the standalone top nav strip, removed the supplemental explainer banner and header helper copy, and moved the pipeline bar below the header
+- `outputs/html.py`: consolidated Macro Pulse into one stronger top summary block, removed the redundant header/banner pair, moved `Market Posture` and `What Matters Today` directly below the top block, and switched top metadata to aligned boxed cells
+- `outputs/index_html.py`: removed the loose landing-page tagline/meta strip, removed driver text from the header area, integrated navigation into the main header, and converted the top summary into a compact boxed metadata grid
+
+### What was preserved
+- Report logic and data derivation — unchanged
+- Scanner / scoring / event logic — unchanged
+- Shared theme and deployment path — preserved
+- Existing page roles and section content — preserved outside the scoped layout cleanup
+
+### Verification
+- `python3 -m py_compile outputs/shared.py outputs/html.py outputs/index_html.py outputs/options_html.py outputs/premarket_html.py` passed
+- Searched renderers to confirm standalone top-nav calls and the removed helper copy are no longer used in the affected pages
+
+### Files changed
+- `outputs/shared.py`
+- `outputs/premarket_html.py`
+- `outputs/options_html.py`
+- `outputs/html.py`
+- `outputs/index_html.py`
+- `docs/DEV_LOG.md`
+
+---
+
 ## 2026-03-31 — Lean Pre-Market robustness pass
 
 ### What changed
