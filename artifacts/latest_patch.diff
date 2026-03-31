@@ -1,201 +1,329 @@
 diff --git a/docs/DEV_LOG.md b/docs/DEV_LOG.md
-index 73d61e8..c7f73cb 100644
+index c7f73cb..65e35d7 100644
 --- a/docs/DEV_LOG.md
 +++ b/docs/DEV_LOG.md
-@@ -2,6 +2,62 @@
+@@ -2,6 +2,55 @@
  
  ---
  
-+## 2026-03-31 — Pre-Market header sanity fix
++## 2026-03-31 — Macro Pulse and Dashboard live header cleanup
 +
 +### What changed
-+- `outputs/premarket_html.py`: audited the actual Pre-Market render path and confirmed the page was still stacking two top summary surfaces
-+- `outputs/premarket_html.py`: replaced the `report_header(...)` + `_daily_mission_html(...)` pair with one consolidated boxed summary block for the Pre-Market page only
-+- `outputs/premarket_html.py`: moved `MIXED` regime rendering onto shared `stat_block(...)` cells so it no longer uses the old inline `mission-value` layout path
++- `outputs/html.py`: removed redundant top-row regime/driver duplication from Macro Pulse so the boxed summary card remains the only top summary surface and `MIXED` renders only in aligned stat cells
++- `outputs/index_html.py`: replaced the Dashboard `report_header(...)` + boxed summary stack with one boxed summary card that owns title, metadata, navigation, and stat cells
++- regenerated the real Pages deployment targets for both pages:
++  - `_site/macro_pulse.html`
++  - `_site/index.html`
++  - `reports/output/macro_pulse.html`
++  - `reports/output/index.html`
 +
 +### Root cause
-+- The prior UI polish pass cleaned up shared header usage, but Pre-Market still rendered its page-local `_daily_mission_html()` directly under the shared header
-+- That left two overlapping metadata surfaces on the actual page
-+- The `MIXED` label was still emitted by the old `.mission-value` inline row on Pre-Market, not by the aligned stat-cell layout
++- Macro Pulse source had already been moved to a boxed summary card, but it still repeated regime/driver context in the top row outside the stat-cell layout
++- Dashboard source still emitted two top surfaces in the actual render path: a shared `report_header(...)` followed by a second boxed summary card
++- local preview files had previously lagged behind template changes, which made the stale top layout appear unchanged in browser checks
 +
 +### Verification
-+- `python3 -m py_compile outputs/premarket_html.py` passed
-+- `python3 desktop/test_premarket_fixtures.py` passed
-+- Rebuilt a scoped sanity render to `artifacts/premarket_sanity.html` and confirmed:
-+  - `report_header_count=0`
-+  - `daily_mission_count=0`
-+  - `mission_value_mixed_count=0`
-+  - `stat_value_mixed_count=1`
++- `python3 -m py_compile outputs/html.py outputs/index_html.py` passed
++- Rebuilt actual deployment files with the live render path:
++  - `.venv/bin/python - <<'PY' ... save_macro(path='_site/macro_pulse.html') ... save_index(path='_site/index.html') ... PY`
++- Verified rendered deployment files directly:
++  - `_site/macro_pulse.html`
++    - `<div class="report-header">=0`
++    - `<div class="surface-card summary-card">=1`
++    - `<div class="summary-driver">=0`
++    - `<div class="report-note">=0`
++    - `<nav class="nav-bar">=0`
++    - `<div class="nav-inline">=1`
++    - `<div class="regime-pill mixed">MIXED</div>=0`
++    - `<div class="stat-value">MIXED</div>=1`
++  - `_site/index.html`
++    - `<div class="report-header">=0`
++    - `<div class="surface-card hub-summary-card">=1`
++    - `<div class="hub-tagline">=0`
++    - `<div class="hub-read">=0`
++    - `<div class="meta-strip">=0`
++    - `<div class="driver-text">=0`
++    - `<div class="report-note">=0`
++    - `<nav class="nav-bar">=0`
++    - `<div class="nav-inline">=1`
++    - `<div class="stat-value">MIXED</div>=1`
 +
 +### Files changed
-+- `outputs/premarket_html.py`
-+- `docs/DEV_LOG.md`
-+
-+---
-+
-+## 2026-03-31 — Final UI polish pass
-+
-+### What changed
-+- `outputs/shared.py`: added inline header navigation support via `nav_links()` and `report_header(..., nav_html=...)` so page navigation now lives inside the header zone instead of above it
-+- `outputs/premarket_html.py`: removed the standalone top nav strip and integrated navigation into the report header; removed header helper copy while preserving existing content sections
-+- `outputs/options_html.py`: removed the standalone top nav strip, removed the supplemental explainer banner and header helper copy, and moved the pipeline bar below the header
-+- `outputs/html.py`: consolidated Macro Pulse into one stronger top summary block, removed the redundant header/banner pair, moved `Market Posture` and `What Matters Today` directly below the top block, and switched top metadata to aligned boxed cells
-+- `outputs/index_html.py`: removed the loose landing-page tagline/meta strip, removed driver text from the header area, integrated navigation into the main header, and converted the top summary into a compact boxed metadata grid
-+
-+### What was preserved
-+- Report logic and data derivation — unchanged
-+- Scanner / scoring / event logic — unchanged
-+- Shared theme and deployment path — preserved
-+- Existing page roles and section content — preserved outside the scoped layout cleanup
-+
-+### Verification
-+- `python3 -m py_compile outputs/shared.py outputs/html.py outputs/index_html.py outputs/options_html.py outputs/premarket_html.py` passed
-+- Searched renderers to confirm standalone top-nav calls and the removed helper copy are no longer used in the affected pages
-+
-+### Files changed
-+- `outputs/shared.py`
-+- `outputs/premarket_html.py`
-+- `outputs/options_html.py`
 +- `outputs/html.py`
 +- `outputs/index_html.py`
 +- `docs/DEV_LOG.md`
 +
 +---
 +
- ## 2026-03-31 — Lean Pre-Market robustness pass
+ ## 2026-03-31 — Pre-Market header sanity fix
  
  ### What changed
-diff --git a/outputs/premarket_html.py b/outputs/premarket_html.py
-index f9e1397..6442db8 100644
---- a/outputs/premarket_html.py
-+++ b/outputs/premarket_html.py
-@@ -10,7 +10,7 @@ from core.formatter import arrow, fmt_pct, fmt_price
- from macro.incidents import detect
- from macro.regime import classify, cross_asset_read, drivers
- from macro.session import current_session
--from outputs.shared import card_block, footer, nav_bar, page_shell, report_header, section_block
-+from outputs.shared import card_block, footer, nav_links, page_shell, section_block, stat_block
- from reports.calendar import get_events, get_month_events
- 
- # ── Helpers ──────────────────────────────────────────────────
-@@ -350,31 +350,39 @@ def _overnight_narrative(data_map: dict, regime: str, primary: str, secondary: s
-     return f"{what} {why} {impl}"
- 
- 
--def _daily_mission_html(regime: str, session: str, primary: str, secondary: str) -> str:
--    """Render the at-a-glance daily context strip below the report header."""
-+def _summary_block(
-+    now: str,
-+    utc_str: str,
-+    data_as_of: str,
-+    regime: str,
-+    session: str,
-+    primary: str,
-+    secondary: str,
-+) -> str:
-     safe_regime = _safe_regime(regime)
-     safe_session = _safe_session(session)
-     safe_primary = _safe_driver(primary)
-     safe_secondary = _safe_driver(secondary)
--    regime_cls = _regime_cls(safe_regime)
-     plan = _execution_plan(safe_regime)
--    return f"""
--    <div class="daily-mission">
--        <div class="mission-row">
--            <span class="mission-label">Regime</span>
--            <span class="mission-value {regime_cls}">{safe_regime}</span>
--            <span class="mission-sep">·</span>
--            <span class="mission-label">Session</span>
--            <span class="mission-value">{safe_session}</span>
--            <span class="mission-sep">·</span>
--            <span class="mission-label">Primary driver</span>
--            <span class="mission-value">{safe_primary}</span>
--            <span class="mission-sep">·</span>
--            <span class="mission-label">Secondary driver</span>
--            <span class="mission-value">{safe_secondary}</span>
-+    regime_cls = _regime_cls(safe_regime)
-+    content = f"""
-+        <div class="pm-summary-top">
-+            <div>
-+                <div class="pm-summary-title">Pre-Market Report</div>
-+                <div class="pm-summary-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of}</div>
-+                {nav_links("premarket")}
-+            </div>
-+            <div class="regime-pill {regime_cls}">{safe_regime}</div>
-         </div>
--        <div class="mission-plan">{plan}</div>
--    </div>"""
-+        <div class="stat-grid pm-summary-grid">
-+            {stat_block("Session", safe_session)}
-+            {stat_block("Regime", safe_regime)}
-+            {stat_block("Primary Driver", safe_primary)}
-+            {stat_block("Secondary Driver", safe_secondary)}
-+            {stat_block("Execution Plan", plan, "pm-plan-block")}
-+        </div>
-+    """
-+    return card_block(content, extra_cls="pm-summary-card")
- 
- 
- def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list[tuple], list[tuple]]:
-@@ -935,20 +943,20 @@ _STYLE = """
-     .wl-avoid     { font-size: 0.73rem; color: var(--red); }
-     .wl-avoid::before     { content: "Avoid if: "; color: var(--muted); font-style: italic; }
- 
--    /* Daily mission strip */
--    .daily-mission {
--        background: rgba(255,255,255,0.02); border: 1px solid var(--border);
--        border-left: 3px solid var(--blue); border-radius: 8px;
--        padding: 12px 16px; margin: 0 0 16px;
-+    /* Top summary */
-+    .pm-summary-card { margin-bottom: 16px; }
-+    .pm-summary-top {
-+        display: flex; justify-content: space-between; align-items: flex-start;
-+        gap: 16px; margin-bottom: 14px;
+diff --git a/outputs/html.py b/outputs/html.py
+index ed4f4db..194f908 100644
+--- a/outputs/html.py
++++ b/outputs/html.py
+@@ -19,10 +19,8 @@ from outputs.shared import (
+     card_block,
+     ensure_output_dir,
+     footer,
+-    info_chip,
+-    nav_bar,
++    nav_links,
+     page_shell,
+-    report_header,
+     section_block,
+     stat_block,
+ )
+@@ -62,7 +60,30 @@ _PAGE_CSS = """
+         letter-spacing: 0.1em;
+         margin-bottom: 10px;
+     }
+-    .driver-row { margin-top: 12px; }
++    .summary-card { margin-bottom: 16px; }
++    .summary-top {
++        display: flex;
++        justify-content: space-between;
++        align-items: flex-start;
++        gap: 16px;
++        flex-wrap: wrap;
++        margin-bottom: 14px;
 +    }
-+    .pm-summary-title {
-+        font-size: 1.45rem; font-weight: 700; color: var(--text); letter-spacing: -0.01em;
++    .summary-title {
++        font-size: 1.6rem;
++        font-weight: 800;
++        letter-spacing: -0.02em;
++    }
++    .summary-meta {
++        color: var(--muted);
++        font-size: 0.88rem;
++        margin-top: 4px;
++    }
++    .summary-grid {
++        display: grid;
++        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
++        gap: 12px;
++    }
+     .incident-banner {
+         background: rgba(127,29,29,0.32);
+         border-color: rgba(224,108,117,0.35);
+@@ -118,7 +139,7 @@ _PAGE_CSS = """
+         margin-top: auto;
+         display: flex;
+         justify-content: space-between;
+-        align-items: center;
++        align-items: flex-end;
+         gap: 8px;
      }
--    .mission-row {
--        display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px;
--        font-size: 0.8rem; margin-bottom: 6px;
-+    .pm-summary-meta {
-+        color: var(--muted); font-size: 0.88rem; margin-top: 4px; margin-bottom: 10px;
-     }
--    .mission-label { color: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.07em; }
--    .mission-value { font-weight: 700; font-size: 0.82rem; }
--    .mission-sep   { color: var(--border); }
--    .mission-plan  { font-size: 0.88rem; color: var(--text); line-height: 1.5; }
-+    .pm-summary-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
-+    .pm-plan-block { grid-column: span 2; }
+     .status-badge {
+@@ -228,6 +249,27 @@ def _macro_dashboard(data_map: dict) -> str:
+     return "".join(cards)
  
-     /* Event vol/trade annotation */
-     .ev-vol-note   { font-size: 0.72rem; color: var(--yellow); margin-top: 3px; }
-@@ -1018,6 +1026,9 @@ _STYLE = """
-         .two-col { grid-template-columns: 1fr; }
-         .setups-grid { grid-template-columns: 1fr; }
-         .sector-cells { flex-direction: column; gap: 4px; }
-+        .pm-summary-top { flex-direction: column; }
-+        .pm-summary-grid { grid-template-columns: 1fr; }
-+        .pm-plan-block { grid-column: auto; }
+ 
++def _summary_block(now: str, utc_str: str, market_ref: str, session: str, regime: str, primary: str, secondary: str) -> str:
++    return card_block(
++        f"""
++        <div class="summary-top">
++            <div>
++                <div class="summary-title">Macro Pulse</div>
++                <div class="summary-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; Prices as of {market_ref}</div>
++                {nav_links("macro_pulse")}
++            </div>
++        </div>
++        <div class="summary-grid">
++            {stat_block("Session", session)}
++            {stat_block("Regime", regime)}
++            {stat_block("Primary Driver", primary)}
++            {stat_block("Secondary Driver", secondary)}
++        </div>
++        """,
++        extra_cls="summary-card",
++    )
++
++
+ def _market_posture(data_map: dict, regime: str) -> str:
+     dxy = float(data_map.get("DXY", {}).get("pct", 0.0) or 0.0)
+     tnx = float(data_map.get("10Y", {}).get("pct", 0.0) or 0.0)
+@@ -349,46 +391,16 @@ def build_html(data_map: dict | None = None) -> str:
+         </div>"""
+ 
+     body = f"""
+-    {nav_bar("macro_pulse")}
++    {_summary_block(now, utc_str, market_ref, session, regime, primary, secondary)}
+ 
+-    {report_header(
+-        title="Macro Pulse",
+-        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; Prices as of {market_ref} &nbsp;·&nbsp; {session} Session",
+-        regime=regime,
+-        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
+-    )}
+-
+-    {card_block(
+-        '<div class="chip-row">'
+-        + info_chip("Timestamp", now)
+-        + info_chip("Session", session)
+-        + info_chip("Regime", regime, _move_cls(0 if regime == "MIXED" else (1 if regime == "RISK ON" else -1)))
+-        + '</div>'
+-        + '<div class="chip-row driver-row">'
+-        + info_chip("Primary Driver", primary)
+-        + info_chip("Secondary Driver", secondary)
+-        + '</div>',
+-        title="Header",
+-    )}
+-
+-    {card_block(
+-        '<div class="banner">'
+-        '<div class="banner-copy">Macro Pulse is the context and regime surface.'
+-        '<span>Next step: move into Pre-Market for the primary execution plan and embedded Options Context.</span>'
+-        '</div>'
+-        '<a class="banner-link" href="premarket.html">Open Pre-Market →</a>'
+-        '</div>',
+-        extra_cls="dash-card",
+-    )}
++    {_market_posture(data_map, regime)}
++
++    {_focus_section(regime, primary, secondary, read, data_map)}
+ 
+     {incident_html}
+ 
+     {section_block("Macro Dashboard", f'<div class="dashboard-grid">{_macro_dashboard(data_map)}</div>')}
+ 
+-    {_market_posture(data_map, regime)}
+-
+-    {_focus_section(regime, primary, secondary, read, data_map)}
+-
+     {_watchlist_preview(regime, primary, secondary)}
+ 
+     {footer("Macro Pulse")}
+diff --git a/outputs/index_html.py b/outputs/index_html.py
+index eb909f9..92d0c55 100644
+--- a/outputs/index_html.py
++++ b/outputs/index_html.py
+@@ -9,32 +9,29 @@ from __future__ import annotations
+ 
+ from datetime import datetime, timezone
+ 
+-from core.formatter import fmt_pct
+-from macro.regime import classify, cross_asset_read, drivers
++from macro.regime import classify
+ from macro.session import current_session
+-from outputs.shared import (
+-    SHARED_CSS, ensure_output_dir, footer, nav_bar, page_shell,
+-    regime_pill_cls,
+-)
++from outputs.shared import card_block, ensure_output_dir, footer, nav_links, page_shell, stat_block
+ 
+ 
+ # ── Page-specific CSS ────────────────────────────────────────
+ 
+ _PAGE_CSS = """
+-    /* Hero */
+-    .hub-hero {
+-        background: linear-gradient(135deg, #252b36, #2a3140);
+-        border: 1px solid var(--border); border-radius: 10px;
+-        padding: 28px 24px; margin-bottom: 20px; text-align: center;
++    /* Top summary */
++    .hub-summary-card { margin-bottom: 20px; }
++    .hub-summary-top {
++        display: flex; justify-content: space-between; align-items: flex-start;
++        gap: 16px; margin-bottom: 14px; flex-wrap: wrap;
+     }
+-    .hub-title   { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px; }
+-    .hub-tagline { color: var(--muted); font-size: 0.95rem; margin-bottom: 18px; }
+-    .hub-regime  {
+-        display: inline-block; padding: 10px 24px; border-radius: 999px;
+-        font-size: 1.1rem; font-weight: 700; letter-spacing: 0.05em; border: 1px solid;
+-        margin-bottom: 8px;
++    .hub-title {
++        font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;
++    }
++    .hub-meta {
++        color: var(--muted); font-size: 0.88rem; margin-top: 4px;
++    }
++    .hub-summary {
++        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+     }
+-    .hub-read { color: var(--muted); font-size: 0.9rem; max-width: 600px; margin: 10px auto 0; }
+     .hub-flow {
+         display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+         margin-top: 14px; padding: 8px 14px; border-radius: 999px;
+@@ -71,16 +68,10 @@ _PAGE_CSS = """
+         border: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 0.7rem;
+         text-transform: uppercase; letter-spacing: 0.06em;
+     }
+-
+-    /* Meta strip */
+-    .meta-strip {
+-        text-align: center; color: var(--muted); font-size: 0.82rem;
+-        margin-bottom: 20px;
+-    }
+-
+     @media (max-width: 640px) {
+         .report-grid { grid-template-columns: 1fr; }
+-        .hub-title { font-size: 1.5rem; }
++        .hub-summary { grid-template-columns: 1fr; }
++        .hub-summary-top { flex-direction: column; }
      }
  """
  
-@@ -1068,17 +1079,7 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
-     overnight_narrative = _overnight_narrative(data_map, regime, primary, secondary)
+@@ -133,10 +124,6 @@ def build_index_html(data_map: dict | None = None) -> str:
+     utc_str = _utc.strftime("%H:%M UTC")
+     session = current_session()
+     regime  = classify(data_map)
+-    primary, secondary = drivers(data_map)
+-    read    = cross_asset_read(data_map)
+-
+-    rcls    = regime_pill_cls(regime)
+ 
+     cards_html = "".join(
+         f"""
+@@ -151,27 +138,29 @@ def build_index_html(data_map: dict | None = None) -> str:
+     )
  
      body = f"""
--    {nav_bar("premarket")}
+-    {nav_bar("index")}
 -
--    {report_header(
--        title="Pre-Market Report",
--        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session",
--        regime=regime,
--        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
--        note_text="Flagship execution plan: market context, validated top trades, watchlist setups, and embedded Options Context.",
--    )}
+-    <div class="hub-hero">
+-        <div class="hub-title">Macro Suite</div>
+-        <div class="hub-tagline">One workflow: context first, execution second, options drilldown only when needed</div>
+-        <div class="hub-regime regime-pill {rcls}">{regime}</div>
+-        <div class="hub-read">{read}</div>
+-        <div class="hub-flow">
+-            <span>Macro Pulse</span>
+-            <span>→</span>
+-            <span>Pre-Market</span>
+-            <span>→</span>
+-            <span>Embedded Options Context</span>
+-        </div>
+-    </div>
 -
--    {_daily_mission_html(regime, session, primary, secondary)}
-+    {_summary_block(now, utc_str, data_as_of, regime, session, primary, secondary)}
- 
-     {section_block(
-         "Today's Events",
+-    <div class="meta-strip">
+-        {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {session} Session
+-        &nbsp;·&nbsp; Primary: {primary} &nbsp;·&nbsp; Secondary: {secondary}
+-    </div>
+-
++    {card_block(
++        f'<div class="hub-summary-top">'
++        f'<div>'
++        f'<div class="hub-title">Macro Suite</div>'
++        f'<div class="hub-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str}</div>'
++        f'{nav_links("index")}'
++        f'</div>'
++        f'</div>'
++        f'<div class="hub-summary">'
++        f'{stat_block("Updated", now)}'
++        f'{stat_block("Market Ref", utc_str)}'
++        f'{stat_block("Session", session)}'
++        f'{stat_block("Regime", regime)}'
++        f'</div>'
++        f'<div class="hub-flow">'
++        f'<span>Macro Pulse</span>'
++        f'<span>→</span>'
++        f'<span>Pre-Market</span>'
++        f'<span>→</span>'
++        f'<span>Embedded Options Context</span>'
++        f'</div>',
++        extra_cls="hub-summary-card"
++    )}
+     <div class="report-grid">
+         {cards_html}
+     </div>

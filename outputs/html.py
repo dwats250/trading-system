@@ -19,10 +19,8 @@ from outputs.shared import (
     card_block,
     ensure_output_dir,
     footer,
-    info_chip,
-    nav_bar,
+    nav_links,
     page_shell,
-    report_header,
     section_block,
     stat_block,
 )
@@ -62,7 +60,30 @@ _PAGE_CSS = """
         letter-spacing: 0.1em;
         margin-bottom: 10px;
     }
-    .driver-row { margin-top: 12px; }
+    .summary-card { margin-bottom: 16px; }
+    .summary-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 16px;
+        flex-wrap: wrap;
+        margin-bottom: 14px;
+    }
+    .summary-title {
+        font-size: 1.6rem;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+    }
+    .summary-meta {
+        color: var(--muted);
+        font-size: 0.88rem;
+        margin-top: 4px;
+    }
+    .summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+        gap: 12px;
+    }
     .incident-banner {
         background: rgba(127,29,29,0.32);
         border-color: rgba(224,108,117,0.35);
@@ -118,7 +139,7 @@ _PAGE_CSS = """
         margin-top: auto;
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-end;
         gap: 8px;
     }
     .status-badge {
@@ -226,6 +247,27 @@ def _macro_dashboard(data_map: dict) -> str:
             </div>
         </div>""")
     return "".join(cards)
+
+
+def _summary_block(now: str, utc_str: str, market_ref: str, session: str, regime: str, primary: str, secondary: str) -> str:
+    return card_block(
+        f"""
+        <div class="summary-top">
+            <div>
+                <div class="summary-title">Macro Pulse</div>
+                <div class="summary-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; Prices as of {market_ref}</div>
+                {nav_links("macro_pulse")}
+            </div>
+        </div>
+        <div class="summary-grid">
+            {stat_block("Session", session)}
+            {stat_block("Regime", regime)}
+            {stat_block("Primary Driver", primary)}
+            {stat_block("Secondary Driver", secondary)}
+        </div>
+        """,
+        extra_cls="summary-card",
+    )
 
 
 def _market_posture(data_map: dict, regime: str) -> str:
@@ -349,45 +391,15 @@ def build_html(data_map: dict | None = None) -> str:
         </div>"""
 
     body = f"""
-    {nav_bar("macro_pulse")}
-
-    {report_header(
-        title="Macro Pulse",
-        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; Prices as of {market_ref} &nbsp;·&nbsp; {session} Session",
-        regime=regime,
-        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
-    )}
-
-    {card_block(
-        '<div class="chip-row">'
-        + info_chip("Timestamp", now)
-        + info_chip("Session", session)
-        + info_chip("Regime", regime, _move_cls(0 if regime == "MIXED" else (1 if regime == "RISK ON" else -1)))
-        + '</div>'
-        + '<div class="chip-row driver-row">'
-        + info_chip("Primary Driver", primary)
-        + info_chip("Secondary Driver", secondary)
-        + '</div>',
-        title="Header",
-    )}
-
-    {card_block(
-        '<div class="banner">'
-        '<div class="banner-copy">Macro Pulse is the context and regime surface.'
-        '<span>Next step: move into Pre-Market for the primary execution plan and embedded Options Context.</span>'
-        '</div>'
-        '<a class="banner-link" href="premarket.html">Open Pre-Market →</a>'
-        '</div>',
-        extra_cls="dash-card",
-    )}
-
-    {incident_html}
-
-    {section_block("Macro Dashboard", f'<div class="dashboard-grid">{_macro_dashboard(data_map)}</div>')}
+    {_summary_block(now, utc_str, market_ref, session, regime, primary, secondary)}
 
     {_market_posture(data_map, regime)}
 
     {_focus_section(regime, primary, secondary, read, data_map)}
+
+    {incident_html}
+
+    {section_block("Macro Dashboard", f'<div class="dashboard-grid">{_macro_dashboard(data_map)}</div>')}
 
     {_watchlist_preview(regime, primary, secondary)}
 

@@ -2,6 +2,55 @@
 
 ---
 
+## 2026-03-31 — Macro Pulse and Dashboard live header cleanup
+
+### What changed
+- `outputs/html.py`: removed redundant top-row regime/driver duplication from Macro Pulse so the boxed summary card remains the only top summary surface and `MIXED` renders only in aligned stat cells
+- `outputs/index_html.py`: replaced the Dashboard `report_header(...)` + boxed summary stack with one boxed summary card that owns title, metadata, navigation, and stat cells
+- regenerated the real Pages deployment targets for both pages:
+  - `_site/macro_pulse.html`
+  - `_site/index.html`
+  - `reports/output/macro_pulse.html`
+  - `reports/output/index.html`
+
+### Root cause
+- Macro Pulse source had already been moved to a boxed summary card, but it still repeated regime/driver context in the top row outside the stat-cell layout
+- Dashboard source still emitted two top surfaces in the actual render path: a shared `report_header(...)` followed by a second boxed summary card
+- local preview files had previously lagged behind template changes, which made the stale top layout appear unchanged in browser checks
+
+### Verification
+- `python3 -m py_compile outputs/html.py outputs/index_html.py` passed
+- Rebuilt actual deployment files with the live render path:
+  - `.venv/bin/python - <<'PY' ... save_macro(path='_site/macro_pulse.html') ... save_index(path='_site/index.html') ... PY`
+- Verified rendered deployment files directly:
+  - `_site/macro_pulse.html`
+    - `<div class="report-header">=0`
+    - `<div class="surface-card summary-card">=1`
+    - `<div class="summary-driver">=0`
+    - `<div class="report-note">=0`
+    - `<nav class="nav-bar">=0`
+    - `<div class="nav-inline">=1`
+    - `<div class="regime-pill mixed">MIXED</div>=0`
+    - `<div class="stat-value">MIXED</div>=1`
+  - `_site/index.html`
+    - `<div class="report-header">=0`
+    - `<div class="surface-card hub-summary-card">=1`
+    - `<div class="hub-tagline">=0`
+    - `<div class="hub-read">=0`
+    - `<div class="meta-strip">=0`
+    - `<div class="driver-text">=0`
+    - `<div class="report-note">=0`
+    - `<nav class="nav-bar">=0`
+    - `<div class="nav-inline">=1`
+    - `<div class="stat-value">MIXED</div>=1`
+
+### Files changed
+- `outputs/html.py`
+- `outputs/index_html.py`
+- `docs/DEV_LOG.md`
+
+---
+
 ## 2026-03-31 — Pre-Market header sanity fix
 
 ### What changed

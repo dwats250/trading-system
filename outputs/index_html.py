@@ -9,32 +9,29 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from core.formatter import fmt_pct
-from macro.regime import classify, cross_asset_read, drivers
+from macro.regime import classify
 from macro.session import current_session
-from outputs.shared import (
-    SHARED_CSS, ensure_output_dir, footer, nav_bar, page_shell,
-    regime_pill_cls,
-)
+from outputs.shared import card_block, ensure_output_dir, footer, nav_links, page_shell, stat_block
 
 
 # ── Page-specific CSS ────────────────────────────────────────
 
 _PAGE_CSS = """
-    /* Hero */
-    .hub-hero {
-        background: linear-gradient(135deg, #252b36, #2a3140);
-        border: 1px solid var(--border); border-radius: 10px;
-        padding: 28px 24px; margin-bottom: 20px; text-align: center;
+    /* Top summary */
+    .hub-summary-card { margin-bottom: 20px; }
+    .hub-summary-top {
+        display: flex; justify-content: space-between; align-items: flex-start;
+        gap: 16px; margin-bottom: 14px; flex-wrap: wrap;
     }
-    .hub-title   { font-size: 2rem; font-weight: 800; letter-spacing: -0.03em; margin-bottom: 6px; }
-    .hub-tagline { color: var(--muted); font-size: 0.95rem; margin-bottom: 18px; }
-    .hub-regime  {
-        display: inline-block; padding: 10px 24px; border-radius: 999px;
-        font-size: 1.1rem; font-weight: 700; letter-spacing: 0.05em; border: 1px solid;
-        margin-bottom: 8px;
+    .hub-title {
+        font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em;
     }
-    .hub-read { color: var(--muted); font-size: 0.9rem; max-width: 600px; margin: 10px auto 0; }
+    .hub-meta {
+        color: var(--muted); font-size: 0.88rem; margin-top: 4px;
+    }
+    .hub-summary {
+        display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px;
+    }
     .hub-flow {
         display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
         margin-top: 14px; padding: 8px 14px; border-radius: 999px;
@@ -71,16 +68,10 @@ _PAGE_CSS = """
         border: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 0.7rem;
         text-transform: uppercase; letter-spacing: 0.06em;
     }
-
-    /* Meta strip */
-    .meta-strip {
-        text-align: center; color: var(--muted); font-size: 0.82rem;
-        margin-bottom: 20px;
-    }
-
     @media (max-width: 640px) {
         .report-grid { grid-template-columns: 1fr; }
-        .hub-title { font-size: 1.5rem; }
+        .hub-summary { grid-template-columns: 1fr; }
+        .hub-summary-top { flex-direction: column; }
     }
 """
 
@@ -133,10 +124,6 @@ def build_index_html(data_map: dict | None = None) -> str:
     utc_str = _utc.strftime("%H:%M UTC")
     session = current_session()
     regime  = classify(data_map)
-    primary, secondary = drivers(data_map)
-    read    = cross_asset_read(data_map)
-
-    rcls    = regime_pill_cls(regime)
 
     cards_html = "".join(
         f"""
@@ -151,27 +138,29 @@ def build_index_html(data_map: dict | None = None) -> str:
     )
 
     body = f"""
-    {nav_bar("index")}
-
-    <div class="hub-hero">
-        <div class="hub-title">Macro Suite</div>
-        <div class="hub-tagline">One workflow: context first, execution second, options drilldown only when needed</div>
-        <div class="hub-regime regime-pill {rcls}">{regime}</div>
-        <div class="hub-read">{read}</div>
-        <div class="hub-flow">
-            <span>Macro Pulse</span>
-            <span>→</span>
-            <span>Pre-Market</span>
-            <span>→</span>
-            <span>Embedded Options Context</span>
-        </div>
-    </div>
-
-    <div class="meta-strip">
-        {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {session} Session
-        &nbsp;·&nbsp; Primary: {primary} &nbsp;·&nbsp; Secondary: {secondary}
-    </div>
-
+    {card_block(
+        f'<div class="hub-summary-top">'
+        f'<div>'
+        f'<div class="hub-title">Macro Suite</div>'
+        f'<div class="hub-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str}</div>'
+        f'{nav_links("index")}'
+        f'</div>'
+        f'</div>'
+        f'<div class="hub-summary">'
+        f'{stat_block("Updated", now)}'
+        f'{stat_block("Market Ref", utc_str)}'
+        f'{stat_block("Session", session)}'
+        f'{stat_block("Regime", regime)}'
+        f'</div>'
+        f'<div class="hub-flow">'
+        f'<span>Macro Pulse</span>'
+        f'<span>→</span>'
+        f'<span>Pre-Market</span>'
+        f'<span>→</span>'
+        f'<span>Embedded Options Context</span>'
+        f'</div>',
+        extra_cls="hub-summary-card"
+    )}
     <div class="report-grid">
         {cards_html}
     </div>
