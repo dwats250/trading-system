@@ -2,6 +2,39 @@
 
 ---
 
+## 2026-03-31 — Lean Pre-Market robustness pass
+
+### What changed
+- `outputs/premarket_html.py`: tightened fallback handling for the Daily Mission, Events, Overnight Narrative, and Trade Funnel sections so the page keeps rendering cleanly with partial or thin data
+- `outputs/premarket_html.py`: added safe normalization helpers for missing regime, session, and driver values
+- `outputs/premarket_html.py`: refined event annotation logic so `HIGH`, `MED`, and `LOW` impact rows always show a volatility note and trade implication
+- `outputs/premarket_html.py`: upgraded the Trade Funnel to render all tiers independently with explicit empty-state behavior:
+  - Tier 1 `Validated`
+  - Tier 2 `Partially Qualified`
+  - Tier 3 `Watchlist`
+  - Tier 4 `Rejected`
+- `outputs/premarket_html.py`: replaced the old compact off-radar line with a proper rejected tier carrying a brief reason
+- `outputs/premarket_html.py`: added a derived 0–100 watchlist score display from the existing scanner raw score for lightweight comparability only
+- `outputs/premarket_html.py`: made `build_premarket_html()` accept optional `events` input so the renderer can be exercised without a live calendar fetch
+- `desktop/test_premarket_fixtures.py`: added five static fixture scenarios covering bullish calm, risk-off spike, major event day, no validated setups, and thin data
+
+### What was preserved
+- Report logic and scoring — unchanged
+- Scanner pipeline and setup generation — unchanged
+- Options Context embedding — unchanged
+- Shared page shell and deployment path — unchanged
+
+### Verification
+- `python3 -m py_compile outputs/premarket_html.py desktop/test_premarket_fixtures.py` passed
+- `python3 desktop/test_premarket_fixtures.py` passed
+
+### Files changed
+- `outputs/premarket_html.py`
+- `desktop/test_premarket_fixtures.py`
+- `docs/DEV_LOG.md`
+
+---
+
 ## 2026-03-31 — Phase 5: rendering system unification
 
 ### What changed
