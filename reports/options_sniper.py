@@ -30,6 +30,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import json
+from pathlib import Path
 
 from config.tickers import MACRO_SYMBOLS, SNIPER_SYMBOLS
 from core.fetcher import fetch_all
@@ -40,6 +42,7 @@ from macro.incidents import detect
 from macro.playbook import format_playbook, generate
 from macro.regime import classify, cross_asset_read, drivers
 from macro.session import current_session
+from market.quality import compute_market_quality
 from options.chain import OptionsAnalysis, analyze
 from sniper.scanner import Setup, scan
 
@@ -310,6 +313,83 @@ def _conclusion(ideas: list[TradeIdea], regime: str) -> str:
     return f"CONCLUSION: {len(a_grade)} A setup(s) [{tickers}] — proceed with discipline, defined size"
 
 
+def _apply_market_quality_surfacing(
+    ideas: list[TradeIdea], market_quality: dict
+) -> list[TradeIdea]:
+    classification = market_quality["classification"]
+
+    if classification == "CLEAN":
+        surfaced = ideas[:3]
+    elif classification == "MIXED":
+        surfaced = [idea for idea in ideas if idea.score >= 70][:2]
+    else:
+        surfaced = [
+            idea for idea in ideas
+            if idea.composite_grade in ("A+", "A") and idea.score >= 85
+        ][:1]
+
+    for idea in ideas:
+        idea.rank = 0
+    for i, idea in enumerate(surfaced, 1):
+        idea.rank = i
+
+    return surfaced
+
+
+def _append_market_quality_log(
+    *,
+    session: str,
+    regime: str,
+    market_quality: dict,
+    surfaced_ideas: list[TradeIdea],
+    all_ranked_ideas: list[TradeIdea],
+    decision: str = "PASS",
+    notes: str | None = None,
+) -> None:
+    log_path = Path(__file__).resolve().parents[1] / "logs" / "market_quality_log.jsonl"
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        record = {
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "session": session,
+            "regime": regime,
+            "market_quality": {
+                "classification": market_quality["classification"],
+                "execution_posture": market_quality["execution_posture"],
+                "components": market_quality["components"],
+                "summary": market_quality["summary"],
+            },
+            "top_ideas": [
+                {
+                    "ticker": idea.setup.ticker,
+                    "score": idea.score,
+                    "grade": idea.composite_grade,
+                }
+                for idea in surfaced_ideas
+            ],
+            "suppressed_count": max(len(all_ranked_ideas) - len(surfaced_ideas), 0),
+            "decision": decision,
+        }
+        if notes:
+            record["notes"] = notes
+        with log_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, separators=(",", ":")) + "\n")
+    except Exception:
+        return
+
+
+def _prompt_decision() -> str:
+    try:
+        raw = input("Decision? [T]rade / [P]ass / [W]atch (default: Pass): ").strip().lower()
+    except Exception:
+        return "PASS"
+    if raw == "t":
+        return "TRADE"
+    if raw == "w":
+        return "WATCH"
+    return "PASS"
+
+
 # ── Main report builder ───────────────────────────────────────
 
 def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], list[Rejection]]:
@@ -329,6 +409,7 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     regime            = classify(macro_data)
     primary, secondary = drivers(macro_data)
     incidents          = detect(macro_data)
+    market_quality     = compute_market_quality(macro_data)
     playbook           = generate(regime, primary, secondary)
     focus              = route(primary, secondary, regime)
 
@@ -390,8 +471,7 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     # Sort: A+ first, then A, then B — each group by score descending
     _grade_order = {"A+": 0, "A": 1, "B": 2}
     ideas.sort(key=lambda i: (_grade_order.get(i.composite_grade, 3), -i.score))
-    for i, idea in enumerate(ideas[:3], 1):
-        idea.rank = i
+    surfaced_ideas = _apply_market_quality_surfacing(ideas, market_quality)
 
     # ── Build output ──────────────────────────────────────────
     lines: list[str] = []
@@ -414,6 +494,12 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
 
     lines.append(divider())
 
+    # Market Quality
+    lines.append(f"Market Quality: {market_quality['classification']}")
+    lines.append(f"Posture: {market_quality['execution_posture'].title()}")
+    lines.append(f"Why: {market_quality['summary']}")
+    lines.append(divider())
+
     # Playbook + Focus
     lines.extend(format_playbook(playbook))
     lines.append("")
@@ -421,8 +507,8 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
     lines.append(divider())
 
     # Top setups
-    tradeable = [i for i in ideas[:3] if i.composite_grade in ("A+", "A")]
-    watchlist = [i for i in ideas[:3] if i.composite_grade == "B"]
+    tradeable = [i for i in surfaced_ideas if i.composite_grade in ("A+", "A")]
+    watchlist = [i for i in surfaced_ideas if i.composite_grade == "B"]
 
     lines.append("TOP SETUPS")
     lines.append("")
@@ -447,10 +533,20 @@ def build_report(macro_data: dict | None = None) -> tuple[str, list[TradeIdea], 
 
     # Conclusion
     lines.append(divider())
-    lines.append(_conclusion(ideas, regime))
+    lines.append(_conclusion(surfaced_ideas, regime))
     lines.append(divider("═"))
 
-    return "\n".join(lines), ideas, rejections
+    decision = _prompt_decision()
+    _append_market_quality_log(
+        session=session,
+        regime=regime,
+        market_quality=market_quality,
+        surfaced_ideas=surfaced_ideas,
+        all_ranked_ideas=ideas,
+        decision=decision,
+    )
+
+    return "\n".join(lines), surfaced_ideas, rejections
 
 
 def run(
