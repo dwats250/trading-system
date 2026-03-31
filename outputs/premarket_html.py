@@ -201,7 +201,7 @@ def _setup_cards(setups: list, regime: str) -> str:
             grade_cls  = grade_cls_map.get(s.grade, "")
             disqualifier = _primary_disqualifier(reasons)
             html += f"""
-            <div class="watchlist-card">
+            <div class="watchlist-card {bias_cls}">
                 <div class="watchlist-row">
                     <span class="watchlist-ticker">{s.ticker}</span>
                     <span class="setup-bias {bias_cls}" style="font-size:0.72rem;padding:1px 7px">{s.bias}</span>
@@ -309,9 +309,9 @@ _STYLE = """
         padding: 6px 14px; border-radius: 999px; font-size: 0.82rem;
         font-weight: 600; letter-spacing: 0.04em; border: 1px solid;
     }
-    .regime-on   { background: rgba(34,197,94,0.12);  border-color: rgba(34,197,94,0.4);  color: #86efac; }
-    .regime-off  { background: rgba(239,68,68,0.12);  border-color: rgba(239,68,68,0.4);  color: #fca5a5; }
-    .regime-mixed{ background: rgba(245,158,11,0.12); border-color: rgba(245,158,11,0.4); color: #fde68a; }
+    .regime-on   { background: rgba(152,195,121,0.12); border-color: rgba(152,195,121,0.4); color: #a8d69e; }
+    .regime-off  { background: rgba(224,108,117,0.12); border-color: rgba(224,108,117,0.4); color: #e89099; }
+    .regime-mixed{ background: rgba(229,192,123,0.12); border-color: rgba(229,192,123,0.4); color: #ecd09a; }
 
     /* Sections */
     .section { margin-bottom: 16px; }
@@ -336,7 +336,7 @@ _STYLE = """
 
     /* Macro table */
     .macro-table { width: 100%; border-collapse: collapse; }
-    .macro-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .macro-table tr { border-bottom: 1px solid rgba(55,65,81,0.5); }
     .macro-table tr:last-child { border-bottom: none; }
     .row-label  { color: var(--muted); padding: 7px 0; width: 38%; }
     .row-price  { font-weight: 600; padding: 7px 8px; }
@@ -345,14 +345,14 @@ _STYLE = """
 
     /* Calendar */
     .cal-table { width: 100%; border-collapse: collapse; }
-    .cal-table tr { border-bottom: 1px solid rgba(30,58,95,0.5); }
+    .cal-table tr { border-bottom: 1px solid rgba(55,65,81,0.5); }
     .cal-table tr:last-child { border-bottom: none; }
     .ev-time  { color: var(--muted); padding: 7px 12px 7px 0; white-space: nowrap; width: 110px; }
     .ev-name  { padding: 7px 8px; }
     .ev-est   { color: var(--muted); padding: 7px 0; text-align: right; font-size: 0.85rem; }
-    .impact-badge { padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; }
-    .impact-high { background: rgba(239,68,68,0.2); color: #fca5a5; }
-    .impact-med  { background: rgba(96,165,250,0.15); color: #93c5fd; }
+    .impact-badge { padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; }
+    .impact-high { background: rgba(224,108,117,0.2); color: #e89099; }
+    .impact-med  { background: rgba(97,175,239,0.15); color: #93c5fd; }
     .no-events   { color: var(--muted); padding: 12px 0; text-align: center; }
     .ev-date-header { background: rgba(30,58,95,0.4); color: var(--muted);
                       font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
@@ -372,12 +372,12 @@ _STYLE = """
         padding: 2px 10px; border-radius: 999px;
         font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em;
     }
-    .bias-long    { background: rgba(34,197,94,0.15); color: #86efac; }
-    .bias-short   { background: rgba(239,68,68,0.15); color: #fca5a5; }
-    .bias-neutral { background: rgba(245,158,11,0.15); color: #fde68a; }
-    .grade-a { background: rgba(34,197,94,0.15);   color: #86efac; }
-    .grade-b { background: rgba(245,158,11,0.15);  color: #fde68a; }
-    .grade-c { background: rgba(239,68,68,0.15);   color: #fca5a5; }
+    .bias-long    { background: rgba(152,195,121,0.15); color: #a8d69e; }
+    .bias-short   { background: rgba(224,108,117,0.15); color: #e89099; }
+    .bias-neutral { background: rgba(229,192,123,0.15); color: #ecd09a; }
+    .grade-a { background: rgba(152,195,121,0.15); color: #a8d69e; }
+    .grade-b { background: rgba(229,192,123,0.15); color: #ecd09a; }
+    .grade-c { background: rgba(139,147,166,0.15); color: #a3a8b4; }
 
     /* ── Watchlist — visually and semantically distinct from validated trades ── */
     .watchlist-label {
@@ -390,17 +390,20 @@ _STYLE = """
         font-size: 0.75rem; color: #6b7280; margin-bottom: 8px; font-style: italic;
     }
     .watchlist-card {
-        background: rgba(15,20,30,0.5); border: 1px solid rgba(75,85,99,0.25);
-        border-radius: 8px; padding: 8px 12px; margin-bottom: 5px; opacity: 0.7;
+        background: var(--surface); border: 1px solid var(--border);
+        border-left-width: 3px; border-radius: 6px;
+        padding: 8px 12px; margin-bottom: 5px;
     }
+    .watchlist-card.bias-long  { border-left-color: var(--green); }
+    .watchlist-card.bias-short { border-left-color: var(--red);   }
+    .watchlist-card.bias-long  .watchlist-ticker { color: var(--green); }
+    .watchlist-card.bias-short .watchlist-ticker { color: var(--red);   }
     .watchlist-row { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
-    .watchlist-ticker { font-weight: 700; font-size: 0.88rem; color: #9ca3af; }
+    .watchlist-ticker { font-weight: 700; font-size: 0.88rem; color: var(--muted); }
     .watchlist-grade  { font-size: 0.72rem; margin-left: auto; padding: 1px 7px;
-                        border-radius: 999px; }
-    .watchlist-blocker {
-        font-size: 0.75rem; color: #6b7280;
-    }
-    .watchlist-blocker::before { content: "⛔ "; }
+                        border-radius: 4px; }
+    .watchlist-blocker { font-size: 0.75rem; color: var(--muted); }
+    .watchlist-blocker::before { content: "↳ "; color: var(--border); }
     /* Off-radar — minimal, no card treatment */
     .off-radar {
         margin-top: 10px; font-size: 0.72rem; color: #4b5563; font-style: italic;
@@ -413,12 +416,12 @@ _STYLE = """
     .skip-list { color: var(--muted); font-size: 0.85rem; margin-top: 8px; }
     .no-setups { color: var(--muted); text-align: center; padding: 20px; }
     .regime-note {
-        padding: 10px 14px; border-radius: 10px; margin-bottom: 12px;
+        padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;
         font-size: 0.88rem; font-weight: 600;
-        background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.2); color: #fca5a5;
+        background: rgba(224,108,117,0.08); border: 1px solid rgba(224,108,117,0.2); color: #e89099;
     }
-    .regime-note.on   { background: rgba(34,197,94,0.08); border-color: rgba(34,197,94,0.2); color: #86efac; }
-    .regime-note.mixed{ background: rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.2); color: #fde68a; }
+    .regime-note.on   { background: rgba(152,195,121,0.08); border-color: rgba(152,195,121,0.2); color: #a8d69e; }
+    .regime-note.mixed{ background: rgba(229,192,123,0.08); border-color: rgba(229,192,123,0.2); color: #ecd09a; }
 
     /* Incidents */
     .incident-box {
