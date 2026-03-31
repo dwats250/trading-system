@@ -19,3 +19,6 @@ __pycache__/
 
 # Editor
 .vscode/
+
+# Generated build output (deployed via GitHub Actions, not committed)
+site/

@@ -70,14 +70,27 @@ premarket   # run full pre-market report
 
 Every push to `main` automatically builds and deploys the macro dashboard to GitHub Pages.
 
+**Workflow:** `.github/workflows/deploy-dashboard.yml`
+- Triggers on push to `main` and `workflow_dispatch`
+- `build` job: runs `python -m dashboard.macro`, uploads `site/` as Pages artifact
+- `deploy` job: depends on `build`, deploys artifact via `actions/deploy-pages`
+
 **Build locally:**
 ```bash
 python -m dashboard.macro
 ```
-Writes `artifacts/macro_dashboard.html` and `site/index.html`.
+Writes:
+- `artifacts/macro_dashboard.html` — local preview
+- `site/index.html` — Pages deploy target (gitignored, built in CI)
 
-**Hosted dashboard:**
-Go to **Settings → Pages** in the GitHub repo. The URL will be shown there after the first deploy (format: `https://<user>.github.io/<repo>/`).
+**Hosted URL pattern:**
+```
+https://dwats250.github.io/trading-system/
+```
+The exact URL appears under **Settings → Pages** after the first successful deploy.
+
+**One-time repo setup (manual):**
+Go to **Settings → Pages → Source** and select **GitHub Actions**.
 
 **Phone workflow:**
 Open the Pages URL in Chrome. No local server, no SSH, no Termux required.

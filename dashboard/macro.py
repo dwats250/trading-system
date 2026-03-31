@@ -107,6 +107,7 @@ def main() -> None:
 
     # 3b. Write to site/ (GitHub Pages deploy target)
     _SITE.mkdir(exist_ok=True)
+    (_SITE / ".nojekyll").touch()          # prevent Jekyll processing on Pages
     site_path = _SITE / "index.html"
     site_path.write_text(html_content, encoding="utf-8")
     print(f"  Site:      {site_path}")
