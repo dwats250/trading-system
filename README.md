@@ -66,6 +66,26 @@ premarket   # run full pre-market report
 
 ---
 
+## GitHub Pages Dashboard
+
+Every push to `main` automatically builds and deploys the macro dashboard to GitHub Pages.
+
+**Build locally:**
+```bash
+python -m dashboard.macro
+```
+Writes `artifacts/macro_dashboard.html` and `site/index.html`.
+
+**Hosted dashboard:**
+Go to **Settings → Pages** in the GitHub repo. The URL will be shown there after the first deploy (format: `https://<user>.github.io/<repo>/`).
+
+**Phone workflow:**
+Open the Pages URL in Chrome. No local server, no SSH, no Termux required.
+
+> ⚠️ GitHub Pages is public. Do not push API keys, private tickers, or sensitive position data into the generated output.
+
+---
+
 ## Version
 
 v2.0 — Modular rebuild with Entry Sniper

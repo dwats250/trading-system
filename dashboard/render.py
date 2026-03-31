@@ -40,6 +40,7 @@ def render_macro_html(
     text: str,
     title: str = "Macro Pulse",
     refresh_seconds: int | None = None,
+    footer: str | None = None,
 ) -> str:
     """
     Convert macro pulse text to a dark-themed, mobile-friendly HTML dashboard.
@@ -48,6 +49,7 @@ def render_macro_html(
         text:            The formatted macro pulse string.
         title:           Page/card title shown in the header.
         refresh_seconds: If set, adds a <meta http-equiv="refresh"> tag.
+        footer:          Optional footer text rendered below the pre block.
 
     Returns:
         Complete HTML document string.
@@ -60,6 +62,11 @@ def render_macro_html(
 
     body = "\n".join(_highlight_line(ln) for ln in text.split("\n"))
     safe_title = html.escape(title)
+    footer_html = (
+        f'\n    <div class="footer">{html.escape(footer)}</div>'
+        if footer
+        else ""
+    )
 
     return f"""\
 <!DOCTYPE html>
@@ -105,6 +112,14 @@ def render_macro_html(
       word-break: break-word;
     }}
 
+    .footer {{
+      margin-top: 18px;
+      font-size: 10px;
+      color: #484f58;
+      border-top: 1px solid #21262d;
+      padding-top: 10px;
+    }}
+
     /* regime */
     .risk-on  {{ color: #3fb950; font-weight: bold; }}
     .risk-off {{ color: #f85149; font-weight: bold; }}
@@ -124,7 +139,7 @@ def render_macro_html(
 <body>
   <div class="card">
     <div class="card-title">{safe_title}</div>
-    <pre>{body}</pre>
+    <pre>{body}</pre>{footer_html}
   </div>
 </body>
 </html>

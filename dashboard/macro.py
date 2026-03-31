@@ -16,6 +16,7 @@ import os
 import shutil
 import time
 import webbrowser
+from datetime import datetime
 from pathlib import Path
 
 from dashboard.render import render_macro_html
@@ -26,6 +27,7 @@ from macro.pulse import run
 
 _REPO_ROOT    = Path(__file__).resolve().parents[1]
 _ARTIFACTS    = _REPO_ROOT / "artifacts"
+_SITE         = _REPO_ROOT / "site"
 _DASHBOARD    = "macro_dashboard.html"
 
 _TERMUX_DOCS  = Path.home() / "storage" / "shared" / "Documents"
@@ -88,18 +90,26 @@ def main() -> None:
     text = run()
     print("done.")
 
-    # 2. Render HTML
+    # 2. Render HTML (single render, written to both output locations)
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     html_content = render_macro_html(
         text,
         title="Macro Pulse",
         refresh_seconds=args.refresh,
+        footer=f"Generated {generated_at} · dwats250/trading-system",
     )
 
-    # 3. Write to artifacts/
+    # 3a. Write to artifacts/
     _ARTIFACTS.mkdir(exist_ok=True)
     html_path = _ARTIFACTS / _DASHBOARD
     html_path.write_text(html_content, encoding="utf-8")
     print(f"  Generated: {html_path}")
+
+    # 3b. Write to site/ (GitHub Pages deploy target)
+    _SITE.mkdir(exist_ok=True)
+    site_path = _SITE / "index.html"
+    site_path.write_text(html_content, encoding="utf-8")
+    print(f"  Site:      {site_path}")
 
     # 4. Optional mobile export
     if args.mobile:
