@@ -29,10 +29,8 @@ _ASSET_ORDER = [
 
 
 
-def run() -> dict:
-    """Run the macro pulse. Returns the raw data map for use by other modules."""
-    data_map = fetch_all(MACRO_SYMBOLS)
-
+def build_text(data_map: dict) -> str:
+    """Build formatted macro pulse text from a pre-fetched data map."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     session = current_session()
     regime = classify(data_map)
@@ -61,7 +59,16 @@ def run() -> dict:
     lines.append(divider())
     lines.append(read)
 
-    output = "\n".join(lines)
-    print(output)
+    return "\n".join(lines)
+
+
+def run() -> str:
+    """Run the macro pulse. Returns the formatted output string."""
+    data_map = fetch_all(MACRO_SYMBOLS)
+    output = build_text(data_map)
     send(output)
-    return data_map
+    return output
+
+
+if __name__ == "__main__":
+    print(run())
