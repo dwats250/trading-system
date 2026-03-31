@@ -2,6 +2,160 @@
 
 ---
 
+## 2026-03-31 — Phase 5: rendering system unification
+
+### What changed
+- `outputs/shared.py`: expanded the shared rendering layer beyond nav/header/footer to include reusable UI primitives:
+  - `card_block()`
+  - `section_block()`
+  - `info_chip()`
+  - `stat_block()`
+- `outputs/shared.py`: centralized more cross-page CSS for shared cards, chips, stat blocks, section headers, and banner-style CTA rows
+- `outputs/shared.py`: extended `report_header()` with optional `note_text` so page role copy no longer needs page-local header variants
+- `outputs/premarket_html.py`: migrated the page off standalone HTML scaffolding onto `page_shell()`, `nav_bar()`, `report_header()`, and `footer()`
+- `outputs/options_html.py`: migrated the page off standalone HTML scaffolding onto the same shared shell and header/footer helpers, while preserving Chart.js script injection through `extra_head`
+- `outputs/html.py`: refactored page sections to use shared helper components instead of page-local card/chip/stat wrappers
+
+### Duplication removed
+- Standalone full-document HTML wrappers in Pre-Market and Advanced Options
+- Duplicated nav shell / page container / report header / footer ownership in page-local builders
+- Repeated chip/stat/banner markup in Macro Pulse
+- Repeated card/section wrapper markup patterns across report pages
+
+### What was preserved
+- Report logic and scoring — unchanged
+- Data pipelines and fetch paths — unchanged
+- Pages deployment path — unchanged
+- Chart/script wiring for Advanced Options — unchanged
+- Existing page-specific content structure where it remains distinct and useful
+
+### Remaining inconsistencies
+- Some page-specific content CSS still lives locally in `outputs/premarket_html.py` and `outputs/options_html.py` because the setup cards and chart-heavy drilldown layouts are still unique enough to justify local styling
+- `outputs/index_html.py` still has some homepage-specific card styling, but it already uses the shared shell and does not duplicate full layout scaffolding
+
+### Verification
+- `python3 -m py_compile outputs/shared.py outputs/html.py outputs/premarket_html.py outputs/options_html.py outputs/index_html.py` passed
+
+### Files changed
+- `outputs/shared.py`
+- `outputs/html.py`
+- `outputs/premarket_html.py`
+- `outputs/options_html.py`
+- `docs/DEV_LOG.md`
+
+---
+
+## 2026-03-31 — Phase 4: product rationalization and navigation unification
+
+### What changed
+- `outputs/shared.py`: reordered primary shared navigation so `Pre-Market` now sits ahead of `Macro Pulse`, and relabeled `Options Sniper` to `Advanced Options`
+- `outputs/shared.py`: added nav emphasis classes so `Pre-Market` reads as the primary destination and `Advanced Options` reads as a lower-emphasis secondary path
+- `outputs/index_html.py`: reordered homepage cards to make `Pre-Market Report` the first and most prominent card, reframed `Macro Pulse` as context, and reframed `Advanced Options` as supplemental drilldown
+- `outputs/index_html.py`: added a workflow line in the hero: `Macro Pulse → Pre-Market → Embedded Options Context`
+- `outputs/html.py`: added explicit handoff copy and CTA from `Macro Pulse` into `Pre-Market`, clarifying Macro Pulse as the context/regime page rather than a competing execution page
+- `outputs/premarket_html.py`: added a lightweight top workflow bar and execution-role copy so Pre-Market now presents itself as the flagship execution surface
+- `outputs/options_html.py`: added shared-style navigation, renamed the page UI/title to `Advanced Options Drilldown`, added a contextual banner pointing users back to Pre-Market, and clarified the page as secondary analysis
+
+### Why
+After embedding Options Context into Pre-Market, the Pages experience still treated Macro Pulse, Pre-Market, and Options Sniper too evenly. Phase 4 tightened the suite into one product flow:
+- Macro Pulse = context
+- Pre-Market = flagship execution plan
+- Advanced Options = optional drilldown
+
+### What was preserved
+- No report-generation logic was removed
+- No standalone page was deleted
+- Existing build/deploy paths remain intact
+- CLI dashboard remains untouched
+- Options Sniper functionality is preserved; only its position and labeling were demoted
+
+### Verification
+- `python3 -m py_compile outputs/shared.py outputs/index_html.py outputs/html.py outputs/premarket_html.py outputs/options_html.py` passed
+
+### Files changed
+- `outputs/shared.py`
+- `outputs/index_html.py`
+- `outputs/html.py`
+- `outputs/premarket_html.py`
+- `outputs/options_html.py`
+- `docs/DEV_LOG.md`
+
+---
+
+## 2026-03-31 — Phase 3: Embedded options context in Pre-Market validated trades
+
+### What changed
+- `outputs/premarket_html.py`: replaced the validated-trade `Options Context` placeholder with a compact live section embedded at the bottom of each validated setup card
+- `outputs/premarket_html.py`: reused existing `options.chain.analyze()` output when available to surface:
+  - implied volatility
+  - volume
+  - open interest
+  - spread width proxy (`spread_pct`)
+  - liquidity tier
+- `outputs/premarket_html.py`: added lightweight expression logic for validated trades only:
+  - `Calls` / `Puts`
+  - `Debit Call/Put Spread`
+  - `Credit Put/Call Spread`
+  - `Short` / `Medium` / `Longer` expiry band
+- `outputs/premarket_html.py`: added 1–2 line interpretation layer for premium state and trade suitability
+- `outputs/premarket_html.py`: changed options fetching to lazy-import inside `save()` so the page builder still renders if options dependencies are missing; unavailable data degrades to `Options data unavailable`
+
+### Why
+Phase 3 required a decision-focused options expression layer inside the existing Pre-Market validated trade cards, without reintroducing a separate standalone options workflow or adding chain tables.
+
+### What was preserved
+- Pre-Market page structure — unchanged outside the validated trade card bottom pane
+- Watchlist card structure — unchanged
+- `sniper/scanner.py` chart/setup logic — unchanged
+- Standalone Options Sniper page — unchanged
+- No fabricated options values; if chain data is unavailable, the pane explicitly says so
+
+### Verification
+- `python3 -m py_compile outputs/premarket_html.py` passed
+- Stubbed HTML render validated the embedded pane layout and text flow without relying on live chain access
+- Live options-chain verification was not completed in this environment because `yfinance` is not installed locally
+
+### Files changed
+- `outputs/premarket_html.py` — embedded options context layer
+- `docs/DEV_LOG.md` — this entry
+
+---
+
+## 2026-03-31 — Phase 1: Macro Pulse UI + structure revamp
+
+### What changed
+- `outputs/html.py`: rebuilt the Macro Pulse HTML page on top of `outputs.shared.page_shell()`, `nav_bar()`, `report_header()`, and `footer()` so it now uses the same Tilix-style visual system as the newer Pages output
+- `outputs/html.py`: replaced the old single-grid macro page with explicit sections for header context, macro dashboard, market posture, what-matters-today, incidents, and watchlist preview
+- `outputs/html.py`: reused existing macro functions only for page content derivation:
+  - `classify()` for regime
+  - `drivers()` for primary / secondary drivers
+  - `cross_asset_read()` for cross-asset summary
+  - `detect()` for incidents
+  - `route()` for watchlist preview tickers
+  - `generate()` for short focus / posture text support
+- `outputs/html.py`: added asset-level status badges and responsive card layout for DXY, 10Y, WTI, XAU, XAG, SPY, ES, QQQ, NQ, and VIX when those quotes are present
+- `reports/output/macro_pulse.html`: regenerated locally with a controlled sample data map to verify structure and responsive card rendering without changing fetch logic
+
+### Why
+Macro Pulse was still using an older standalone HTML structure and theme. Phase 1 required aligning it with the newer shared Pages styling while keeping the existing build path and macro data model intact.
+
+### What was preserved
+- `macro/pulse.py` — unchanged
+- CLI dashboard / terminal renderer — unchanged
+- `outputs/shared.py` shared theme contract — reused, not replaced
+- Fetching / regime / driver / incident logic — unchanged
+- No new external data sources, no live browser refresh behavior, no build pipeline changes
+
+### Limitations / deliberate omissions
+- Key levels section was not added because current macro quote data only exposes `price`, `pct`, `change`, and `as_of`; there is no support / resistance / key level data for macro instruments in the existing Macro Pulse pipeline
+- Watchlist preview uses existing focus routing output, not a new scanner pass; it intentionally stays lightweight and links the user to `premarket.html` for trade-level detail
+
+### Files changed
+- `outputs/html.py` — Macro Pulse HTML refactor
+- `docs/DEV_LOG.md` — this entry
+
+---
+
 ## 2026-03-29 — Data freshness clarity patch: prices as-of timestamp
 
 ### What changed

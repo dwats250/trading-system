@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+from html import escape
 
 OUTPUT_DIR = "reports/output"
 
@@ -63,6 +64,15 @@ SHARED_CSS = """
         padding: 3px 10px; border-radius: 999px; border: 1px solid transparent;
     }
     .nav-link:hover { background: rgba(96,165,250,0.1); color: var(--text); }
+    .nav-link.primary {
+        color: #dbeafe;
+        background: rgba(96,165,250,0.1);
+        border-color: rgba(96,165,250,0.22);
+    }
+    .nav-link.secondary {
+        color: #c6ccd8;
+        opacity: 0.92;
+    }
     .nav-link.active {
         background: rgba(96,165,250,0.12); color: #93c5fd;
         border-color: rgba(96,165,250,0.25);
@@ -88,9 +98,13 @@ SHARED_CSS = """
     .regime-pill.on    { background: rgba(152,195,121,0.15); border-color: rgba(152,195,121,0.4); color: #a8d69e; }
     .regime-pill.mixed { background: rgba(229,192,123,0.15); border-color: rgba(229,192,123,0.4); color: #ecd09a; }
     .driver-text { color: var(--muted); font-size: 0.82rem; margin-top: 6px; }
+    .report-note { color: var(--blue); font-size: 0.8rem; margin-top: 6px; }
 
     /* ── Cards ──────────────────────────────────────────── */
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+    .card, .surface-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
+    }
     .card-title {
         font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: 0.1em; color: var(--muted); margin-bottom: 12px;
@@ -103,9 +117,69 @@ SHARED_CSS = """
         letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;
     }
     .section-subtitle { color: var(--muted); font-size: 0.8rem; font-style: italic; margin-bottom: 10px; }
+    .section-head {
+        display: flex; justify-content: space-between; align-items: baseline;
+        gap: 12px; margin-bottom: 10px;
+    }
+    .section-action { color: var(--blue); font-size: 0.8rem; text-decoration: none; }
+    .section-action:hover { text-decoration: underline; }
 
     /* ── Two-col grid ───────────────────────────────────── */
     .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
+
+    /* ── Shared chips / info blocks ────────────────────── */
+    .chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 6px 10px; border-radius: 999px; font-size: 0.78rem;
+        border: 1px solid var(--border); background: rgba(255,255,255,0.03);
+    }
+    .chip-label { color: var(--muted); }
+    .chip-value { color: var(--text); font-weight: 700; }
+    .chip.info {
+        color: #93c5fd; border-color: rgba(96,165,250,0.24);
+        background: rgba(96,165,250,0.08);
+    }
+    .chip.up {
+        color: #a8d69e; border-color: rgba(152,195,121,0.28);
+        background: rgba(152,195,121,0.08);
+    }
+    .chip.dn {
+        color: #e89099; border-color: rgba(224,108,117,0.28);
+        background: rgba(224,108,117,0.08);
+    }
+    .chip.flat {
+        color: #ecd09a; border-color: rgba(229,192,123,0.28);
+        background: rgba(229,192,123,0.08);
+    }
+    .stat-grid {
+        display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px;
+    }
+    .stat-block {
+        padding: 12px; border-radius: 12px;
+        background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.04);
+    }
+    .stat-label {
+        color: var(--muted); font-size: 0.72rem;
+        text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+    }
+    .stat-value { font-size: 1rem; font-weight: 700; color: var(--text); }
+    .banner {
+        display: flex; justify-content: space-between; align-items: center;
+        gap: 14px; flex-wrap: wrap;
+    }
+    .banner-copy { color: var(--text); font-size: 0.9rem; }
+    .banner-copy span {
+        color: var(--muted); display: block; font-size: 0.8rem; margin-top: 3px;
+    }
+    .banner-link {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 8px 12px; border-radius: 999px;
+        border: 1px solid rgba(96,165,250,0.24); color: #dbeafe;
+        background: rgba(96,165,250,0.08); text-decoration: none;
+        font-size: 0.82rem; font-weight: 700;
+    }
+    .banner-link:hover { text-decoration: none; }
 
     /* ── Grade badges ───────────────────────────────────── */
     .grade-badge {
@@ -158,6 +232,7 @@ SHARED_CSS = """
 
     @media (max-width: 640px) {
         .two-col { grid-template-columns: 1fr; }
+        .stat-grid { grid-template-columns: 1fr; }
     }
 """
 
@@ -165,9 +240,9 @@ SHARED_CSS = """
 
 _NAV_LINKS = [
     ("index.html",          "Dashboard",      "index"),
-    ("macro_pulse.html",    "Macro Pulse",    "macro_pulse"),
     ("premarket.html",      "Pre-Market",     "premarket"),
-    ("options_sniper.html", "Options Sniper", "options_sniper"),
+    ("macro_pulse.html",    "Macro Pulse",    "macro_pulse"),
+    ("options_sniper.html", "Advanced Options", "options_sniper"),
 ]
 
 
@@ -181,7 +256,12 @@ def nav_bar(active: str = "") -> str:
     """Navigation bar linking all dashboard pages."""
     items = []
     for href, label, key in _NAV_LINKS:
-        cls = "nav-link active" if active == key else "nav-link"
+        tone = "primary" if key == "premarket" else ("secondary" if key == "options_sniper" else "")
+        cls = "nav-link"
+        if tone:
+            cls += f" {tone}"
+        if active == key:
+            cls += " active"
         items.append(f'<a href="{href}" class="{cls}">{label}</a>')
     links_html = ' <span class="nav-sep">·</span> '.join(items)
     return (
@@ -197,15 +277,18 @@ def report_header(
     meta_line: str,
     regime: str,
     driver_text: str = "",
+    note_text: str = "",
 ) -> str:
     """Standard report header: title/meta left, regime pill + driver right."""
     rcls = regime_pill_cls(regime)
     drv  = f'<div class="driver-text">{driver_text}</div>' if driver_text else ""
+    note = f'<div class="report-note">{note_text}</div>' if note_text else ""
     return f"""
     <div class="report-header">
         <div>
             <div class="report-title">{title}</div>
             <div class="report-meta">{meta_line}</div>
+            {note}
         </div>
         <div class="regime-block">
             <div class="regime-pill {rcls}">{regime}</div>
@@ -240,3 +323,44 @@ def page_shell(
 
 def footer(subtitle: str) -> str:
     return f'<div class="footer">Macro Suite — {subtitle}</div>'
+
+
+def info_chip(label: str, value: str, tone: str = "info") -> str:
+    return (
+        f'<span class="chip {tone}">'
+        f'<span class="chip-label">{escape(label)}</span>'
+        f'<span class="chip-value">{escape(value)}</span>'
+        f'</span>'
+    )
+
+
+def stat_block(label: str, value: str, extra_cls: str = "") -> str:
+    cls = f"stat-block {extra_cls}".strip()
+    return (
+        f'<div class="{cls}">'
+        f'<div class="stat-label">{escape(label)}</div>'
+        f'<div class="stat-value">{escape(value)}</div>'
+        f'</div>'
+    )
+
+
+def card_block(content: str, title: str = "", extra_cls: str = "") -> str:
+    title_html = f'<div class="card-title">{escape(title)}</div>' if title else ""
+    cls = f"surface-card {extra_cls}".strip()
+    return f'<div class="{cls}">{title_html}{content}</div>'
+
+
+def section_block(
+    title: str,
+    content: str,
+    subtitle: str = "",
+    action_html: str = "",
+    extra_cls: str = "",
+) -> str:
+    subtitle_html = f'<div class="section-subtitle">{escape(subtitle)}</div>' if subtitle else ""
+    head = (
+        f'<div class="section-head"><div class="section-title">{escape(title)}</div>{action_html}</div>'
+        if action_html else f'<div class="section-title">{escape(title)}</div>'
+    )
+    cls = f"section {extra_cls}".strip()
+    return f'<section class="{cls}">{head}{subtitle_html}{content}</section>'

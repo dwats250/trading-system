@@ -10,6 +10,7 @@ from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
 from macro.session import current_session
+from outputs.shared import card_block, footer, nav_bar, page_shell, report_header, section_block
 from reports.calendar import get_events, get_month_events
 
 # ── Helpers ──────────────────────────────────────────────────
@@ -140,19 +141,88 @@ def _structural_guardrails(setup, regime: str) -> list[str]:
     return failures
 
 
-def _setup_cards(setups: list, regime: str) -> str:
-    """
-    Three-tier presentation:
-      1. Validated Top Trades     — passed all structural guardrails, actionable
-      2. Watchlist Setups         — grade A/B with identifiable structure, but one
-                                    guardrail blocks execution; shows primary blocker
-      3. Not on radar             — grade C or no structure; compact list only
+def _alignment_label(alignment: str) -> str:
+    if alignment == "bullish":
+        return "Bullish stack — price > EMA9 > EMA21 > EMA50"
+    if alignment == "bearish":
+        return "Bearish stack — price < EMA9 < EMA21 < EMA50"
+    return "Mixed / conflicted EMAs"
 
-    No setup may appear in tier 1 unless it passes every structural guardrail.
-    """
+
+def _atr_interp(atr: float, price: float, support: float, resistance: float, bias: str) -> str:
+    room = (resistance - price) if bias == "LONG" else (price - support)
+    atr_pct = (atr / price) * 100
+    if atr_pct < 1.0:
+        return "Compressed — low volatility"
+    if room >= atr * 1.5:
+        return "Enough room to target"
+    if room < atr * 0.5:
+        return "Extended — most move may be in"
+    return "Normal range"
+
+
+def _confirms_note(s) -> str:
+    t, b = s.setup_type, s.bias
+    if b == "LONG":
+        if t == "breakout":    return f"Hold above {s.resistance:.2f} on close"
+        if t == "pullback":    return f"Hold EMA21 ({s.e21:.2f}) — RSI stays above 50"
+        if t == "trend":       return f"Hold EMA9 ({s.e9:.2f}) on any pullback"
+        if t == "reversal":    return f"Green candle above EMA9 ({s.e9:.2f}) after bounce"
+        return f"Price stays above EMA9 ({s.e9:.2f})"
+    if b == "SHORT":
+        if t == "breakdown":        return f"Fail to reclaim support ({s.support:.2f})"
+        if t == "trend_rejection":  return f"Rejection at EMA9 ({s.e9:.2f}) holds — RSI fading"
+        if t == "failed_breakout":  return f"Unable to reclaim {s.resistance:.2f} — selling continues"
+        return f"Price stays below EMA9 ({s.e9:.2f})"
+    return "Wait for directional confirmation"
+
+
+def _avoid_if_top(s) -> str:
+    if s.bias == "LONG":
+        return f"Opening gap > ATR, or price loses EMA21 ({s.e21:.2f})"
+    if s.bias == "SHORT":
+        return f"Gap up at open, or price reclaims EMA9 ({s.e9:.2f})"
+    return "Structure breaks before entry"
+
+
+def _wl_look_for(s) -> str:
+    t, b = s.setup_type, s.bias
+    if t == "breakout"        and b == "LONG":  return f"Break and close above {s.resistance:.2f}"
+    if t == "pullback"        and b == "LONG":  return f"Dip to EMA9 ({s.e9:.2f})–EMA21 ({s.e21:.2f}) and bounce"
+    if t == "trend"           and b == "LONG":  return f"Hold EMA9 ({s.e9:.2f}) and resume trend"
+    if t == "reversal"        and b == "LONG":  return f"Green candle above EMA9 ({s.e9:.2f}) from oversold"
+    if t == "breakdown"       and b == "SHORT": return f"Lose and fail to reclaim support ({s.support:.2f})"
+    if t == "trend_rejection" and b == "SHORT": return f"Rejection at EMA9 ({s.e9:.2f}) — fade the bounce"
+    if t == "failed_breakout" and b == "SHORT": return f"Fail to hold above {s.resistance:.2f} — confirm follow-through"
+    return "Wait for directional break and confirmation"
+
+
+def _wl_upgrades(failures: list[str], s) -> str:
+    upgrades = []
+    for f in failures:
+        if "R:R" in f:
+            upgrades.append(f"Pullback to EMA21 ({s.e21:.2f}) improves R:R")
+        elif "grade" in f.lower() or "chart" in f.lower():
+            upgrades.append("One more confirming candle")
+        elif "regime" in f.lower():
+            upgrades.append("Wait for regime shift")
+        elif "structure" in f.lower():
+            upgrades.append("Wait for clean setup to form")
+    return " / ".join(upgrades) if upgrades else "Improve setup quality across dimensions"
+
+
+def _wl_avoid(s) -> str:
+    if s.bias == "LONG":
+        return f"Loses EMA21 ({s.e21:.2f}) or breaks support ({s.support:.2f})"
+    if s.bias == "SHORT":
+        return f"Reclaims EMA9 ({s.e9:.2f}) or breaks above resistance ({s.resistance:.2f})"
+    return "Structure invalidates before entry"
+
+
+def _partition_setups(setups: list, regime: str) -> tuple[list, list[tuple], list]:
     validated = []
-    watchlist = []   # good chart + structure, but blocked
-    off_radar = []   # grade C or setup_type=none
+    watchlist = []
+    off_radar = []
 
     for s in setups:
         failures = _structural_guardrails(s, regime)
@@ -162,6 +232,105 @@ def _setup_cards(setups: list, regime: str) -> str:
             watchlist.append((s, failures))
         else:
             off_radar.append(s)
+
+    return validated, watchlist, off_radar
+
+
+def _expiry_band(s, opts) -> str:
+    atr_pct = (s.atr / s.price) * 100 if getattr(s, "atr", None) and s.price else 0.0
+    if opts and opts.dte <= 21:
+        return "Short"
+    if s.setup_type in ("breakout", "breakdown", "trend", "trend_rejection") and (s.rr >= 3.0 or atr_pct >= 2.0):
+        return "Short"
+    if atr_pct < 1.0 or s.setup_type in ("pullback", "reversal", "failed_breakout"):
+        return "Longer"
+    return "Medium"
+
+
+def _strategy_suggestion(s, opts) -> tuple[str, str]:
+    side = "Calls" if s.bias == "LONG" else "Puts"
+    debit = "Debit Call Spread" if s.bias == "LONG" else "Debit Put Spread"
+    credit = "Credit Put Spread" if s.bias == "LONG" else "Credit Call Spread"
+    atr_pct = (s.atr / s.price) * 100 if getattr(s, "atr", None) and s.price else 0.0
+    iv = getattr(opts, "iv", 0.0) if opts else 0.0
+    liquidity = getattr(opts, "liquidity", "") if opts else ""
+
+    if iv >= 0.45 and (atr_pct < 1.0 or s.rr < 2.5):
+        return credit, "IV rich and expected move is tighter — defined-risk premium selling fits better"
+    if iv >= 0.45 or liquidity == "Low":
+        return debit, "IV elevated or fills may be thin — cap premium outlay with a spread"
+    if atr_pct >= 2.0 or s.rr >= 3.0:
+        return side, "Cleaner directional setup with enough room to justify outright exposure"
+    return debit, "Moderate move profile — defined-risk directional spread is cleaner than naked premium"
+
+
+def _premium_view(opts) -> str:
+    if not opts:
+        return "Premium view unavailable"
+    if opts.iv >= 0.45:
+        return f"Premium rich — IV {opts.iv_pct} favors defined-risk structures"
+    if opts.iv <= 0.25:
+        return f"Premium relatively cheap — IV {opts.iv_pct} is reasonable for directional buying"
+    return f"Premium moderate — IV {opts.iv_pct} is not stretched"
+
+
+def _suitability_view(s, expression: str) -> str:
+    atr_pct = (s.atr / s.price) * 100 if getattr(s, "atr", None) and s.price else 0.0
+    if "Credit" in expression:
+        return "Range-to-grind profile — premium-selling structure suits slower follow-through"
+    if atr_pct >= 2.0 or s.rr >= 3.0:
+        return "Directional profile — enough range for a cleaner outright move"
+    return "Directional but contained — spread keeps the expression compact"
+
+
+def _options_context_html(s, opts) -> str:
+    if not opts:
+        return """
+                <div class="setup-pane options-context">
+                    <div class="pane-label">Options Context</div>
+                    <div class="options-empty">Options data unavailable</div>
+                </div>"""
+
+    expression, why = _strategy_suggestion(s, opts)
+    expiry_band = _expiry_band(s, opts)
+    premium_view = _premium_view(opts)
+    suitability = _suitability_view(s, expression)
+    spread_proxy = f"{opts.spread_pct * 100:.1f}%"
+    liq_cls = "liq-high" if opts.liquidity == "High" else ("liq-med" if opts.liquidity == "Medium" else "liq-low")
+
+    return f"""
+                <div class="setup-pane options-context">
+                    <div class="pane-label">Options Context</div>
+                    <div class="options-row">
+                        <span class="options-badge bias-{s.bias.lower()}">{expression}</span>
+                        <span class="options-badge expiry-{expiry_band.lower()}">{expiry_band} expiry</span>
+                        <span class="liq-badge {liq_cls}">{opts.liquidity} liquidity</span>
+                    </div>
+                    <div class="options-metrics">
+                        <span class="options-kv"><span class="options-k">IV</span><span class="options-v">{opts.iv_pct}</span></span>
+                        <span class="options-kv"><span class="options-k">Vol</span><span class="options-v">{opts.volume:,}</span></span>
+                        <span class="options-kv"><span class="options-k">OI</span><span class="options-v">{opts.open_interest:,}</span></span>
+                        <span class="options-kv"><span class="options-k">Spread</span><span class="options-v">{spread_proxy}</span></span>
+                    </div>
+                    <div class="options-contract">{opts.contract_note} &nbsp;·&nbsp; Bid/Ask {opts.bid}/{opts.ask}</div>
+                    <div class="options-note">{why}</div>
+                    <div class="options-note">{premium_view}</div>
+                    <div class="options-note">{suitability}</div>
+                </div>"""
+
+
+def _setup_cards(setups: list, regime: str, options_map: dict[str, object] | None = None) -> str:
+    """
+    Three-tier presentation:
+      1. Validated Top Trades     — passed all structural guardrails, actionable
+      2. Watchlist Setups         — grade A/B with identifiable structure, but one
+                                    guardrail blocks execution; shows primary blocker
+      3. Not on radar             — grade C or no structure; compact list only
+
+    No setup may appear in tier 1 unless it passes every structural guardrail.
+    """
+    options_map = options_map or {}
+    validated, watchlist, off_radar = _partition_setups(setups, regime)
 
     bias_cls_map  = {"LONG": "bias-long", "SHORT": "bias-short"}
     grade_cls_map = {"A": "grade-a", "B": "grade-b", "C": "grade-c"}
@@ -174,21 +343,62 @@ def _setup_cards(setups: list, regime: str) -> str:
         for s in validated[:3]:
             bias_cls  = bias_cls_map.get(s.bias, "bias-neutral")
             grade_cls = grade_cls_map.get(s.grade, "")
+            atr = getattr(s, "atr", None)
+            atr_pane = ""
+            if atr:
+                atr_pct  = (atr / s.price) * 100
+                interp   = _atr_interp(atr, s.price, s.support, s.resistance, s.bias)
+                atr_pane = f"""
+                <div class="setup-pane">
+                    <div class="pane-label">Volatility</div>
+                    <div class="pane-row">
+                        <div class="pane-kv"><span class="pane-k">ATR</span><span class="pane-v">{fmt_price(atr)}</span></div>
+                        <div class="pane-kv"><span class="pane-k">ATR %</span><span class="pane-v">{atr_pct:.1f}%</span></div>
+                        <span class="pane-interp">{interp}</span>
+                    </div>
+                </div>"""
             html += f"""
             <div class="setup-card">
                 <div class="setup-header">
                     <span class="setup-ticker">{s.ticker}</span>
                     <span class="setup-bias {bias_cls}">{s.bias}</span>
                     <span class="setup-grade {grade_cls}">{s.grade}</span>
+                    <span class="setup-type-chip">{s.setup_type.replace("_", " ")}</span>
+                    <span class="setup-conf">conf {s.confidence}/10</span>
                 </div>
-                <div class="setup-row">
-                    <span class="setup-stat">Price <strong>{s.price}</strong></span>
-                    <span class="setup-stat">RSI <strong>{s.rsi_val}</strong></span>
-                    <span class="setup-stat">R:R <strong>{s.rr:.1f}:1</strong></span>
+
+                <div class="setup-pane">
+                    <div class="pane-label">Structure</div>
+                    <div class="pane-row">
+                        <div class="pane-kv"><span class="pane-k">Price</span><span class="pane-v">{s.price}</span></div>
+                        <div class="pane-kv"><span class="pane-k">Support</span><span class="pane-v">{s.support}</span></div>
+                        <div class="pane-kv"><span class="pane-k">Resistance</span><span class="pane-v">{s.resistance}</span></div>
+                    </div>
                 </div>
-                <div class="setup-levels">S: {s.support} &nbsp;|&nbsp; R: {s.resistance}</div>
-                <div class="setup-entry">{s.entry_note}</div>
-                <div class="setup-inv">Stop: {s.invalidation}</div>
+
+                <div class="setup-pane">
+                    <div class="pane-label">Moving Averages</div>
+                    <div class="pane-row">
+                        <div class="pane-kv"><span class="pane-k">EMA 9</span><span class="pane-v">{s.e9}</span></div>
+                        <div class="pane-kv"><span class="pane-k">EMA 21</span><span class="pane-v">{s.e21}</span></div>
+                        <div class="pane-kv"><span class="pane-k">EMA 50</span><span class="pane-v">{s.e50}</span></div>
+                    </div>
+                    <div class="pane-note">{_alignment_label(s.alignment)}</div>
+                </div>
+
+                {atr_pane}
+
+                <div class="setup-pane exec-pane">
+                    <div class="pane-label">Execution</div>
+                    <div class="exec-row"><span class="exec-k">Entry</span><span class="exec-v entry-note">{s.entry_note}</span></div>
+                    <div class="exec-row"><span class="exec-k">Stop</span><span class="exec-v">{s.invalidation}</span></div>
+                    <div class="exec-row"><span class="exec-k">R:R</span><span class="exec-v rr-val">{s.rr:.1f}:1</span></div>
+                    <div class="exec-row"><span class="exec-k">RSI</span><span class="exec-v">{s.rsi_val}</span></div>
+                    <div class="exec-row"><span class="exec-k">Confirms</span><span class="exec-v">{_confirms_note(s)}</span></div>
+                    <div class="exec-row"><span class="exec-k">Avoid if</span><span class="exec-v avoid-note">{_avoid_if_top(s)}</span></div>
+                </div>
+
+                {_options_context_html(s, options_map.get(s.ticker))}
             </div>"""
 
     # ── Tier 2: Watchlist — Good Structure, Not Trade-Ready ───
@@ -197,17 +407,32 @@ def _setup_cards(setups: list, regime: str) -> str:
         <div class="watchlist-label">Watchlist Setups — Good Structure, Not Trade-Ready</div>
         <div class="watchlist-note">Chart structure is identifiable but at least one guardrail blocks execution. Monitor only.</div>"""
         for s, reasons in watchlist[:5]:
-            bias_cls   = bias_cls_map.get(s.bias, "bias-neutral")
-            grade_cls  = grade_cls_map.get(s.grade, "")
+            bias_cls     = bias_cls_map.get(s.bias, "bias-neutral")
             disqualifier = _primary_disqualifier(reasons)
+            atr          = getattr(s, "atr", None)
+            atr_kv       = f'<span class="wl-kv"><span class="wl-k">ATR</span><span class="wl-v">{fmt_price(atr)}</span></span>' if atr else ""
             html += f"""
             <div class="watchlist-card {bias_cls}">
                 <div class="watchlist-row">
                     <span class="watchlist-ticker">{s.ticker}</span>
                     <span class="setup-bias {bias_cls}" style="font-size:0.72rem;padding:1px 7px">{s.bias}</span>
                     <span class="watchlist-grade grade-{s.grade.lower()}">{s.grade}</span>
+                    <span class="watchlist-setup-type">{s.setup_type.replace("_", " ")}</span>
                 </div>
                 <div class="watchlist-blocker">Why not trading: {disqualifier}</div>
+                <div class="watchlist-context">
+                    <div class="wl-kv-row">
+                        <span class="wl-kv"><span class="wl-k">Price</span><span class="wl-v">{s.price}</span></span>
+                        <span class="wl-kv"><span class="wl-k">Support</span><span class="wl-v">{s.support}</span></span>
+                        <span class="wl-kv"><span class="wl-k">Resistance</span><span class="wl-v">{s.resistance}</span></span>
+                        <span class="wl-kv"><span class="wl-k">R:R</span><span class="wl-v">{s.rr:.1f}:1</span></span>
+                        {atr_kv}
+                    </div>
+                    <div class="wl-alignment">EMA {s.alignment.title()} · EMA9 {s.e9} · EMA21 {s.e21} · RSI {s.rsi_val}</div>
+                    <div class="wl-look-for">{_wl_look_for(s)}</div>
+                    <div class="wl-upgrades">{_wl_upgrades(reasons, s)}</div>
+                    <div class="wl-avoid">{_wl_avoid(s)}</div>
+                </div>
             </div>"""
 
     # ── Tier 3: Off radar ─────────────────────────────────────
@@ -272,58 +497,6 @@ def _sector_rows(data_map: dict, extra: dict) -> str:
 # ── Stylesheet ───────────────────────────────────────────────
 
 _STYLE = """
-    :root {
-        --bg: #1b1f27;
-        --surface: #252b36;
-        --surface2: #2a3140;
-        --border: #374151;
-        --text: #d8dee9;
-        --muted: #8b93a6;
-        --green: #98c379;
-        --red: #e06c75;
-        --yellow: #e5c07b;
-        --blue: #61afef;
-        --purple: #c678dd;
-        --shadow: 0 2px 16px rgba(0,0,0,0.4);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-        background: var(--bg); color: var(--text);
-        font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
-        font-size: 14px; line-height: 1.6; padding: 16px;
-    }
-    .page { max-width: 1000px; margin: 0 auto; }
-
-    /* Header */
-    .report-header {
-        background: linear-gradient(135deg, #252b36, #2a3140);
-        border: 1px solid var(--border); border-radius: 10px;
-        padding: 20px 24px; margin-bottom: 16px;
-        display: flex; justify-content: space-between; align-items: center;
-        flex-wrap: wrap; gap: 12px;
-    }
-    .report-title { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
-    .report-meta { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
-    .pill-group { display: flex; gap: 8px; flex-wrap: wrap; }
-    .pill {
-        padding: 6px 14px; border-radius: 999px; font-size: 0.82rem;
-        font-weight: 600; letter-spacing: 0.04em; border: 1px solid;
-    }
-    .regime-on   { background: rgba(152,195,121,0.12); border-color: rgba(152,195,121,0.4); color: #a8d69e; }
-    .regime-off  { background: rgba(224,108,117,0.12); border-color: rgba(224,108,117,0.4); color: #e89099; }
-    .regime-mixed{ background: rgba(229,192,123,0.12); border-color: rgba(229,192,123,0.4); color: #ecd09a; }
-
-    /* Sections */
-    .section { margin-bottom: 16px; }
-    .section-title {
-        font-size: 0.75rem; font-weight: 600; text-transform: uppercase;
-        letter-spacing: 0.1em; color: var(--muted); margin-bottom: 10px;
-    }
-    .card {
-        background: var(--surface); border: 1px solid var(--border);
-        border-radius: 14px; padding: 16px; box-shadow: var(--shadow);
-    }
-
     /* Futures */
     .futures-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
     .fut-card {
@@ -450,11 +623,94 @@ _STYLE = """
     .dn   { color: var(--red); }
     .flat { color: var(--yellow); }
 
-    /* Two-col layout */
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    /* ── Setup type chip / confidence ─────────────────────── */
+    .setup-type-chip {
+        font-size: 0.65rem; padding: 2px 7px; border-radius: 3px;
+        background: rgba(97,175,239,0.1); color: var(--blue);
+        text-transform: capitalize; letter-spacing: 0.03em;
+    }
+    .setup-conf { margin-left: auto; font-size: 0.7rem; color: var(--muted); }
 
-    /* Footer */
-    .footer { text-align: center; color: var(--muted); font-size: 0.8rem; padding: 20px 0 4px; }
+    /* ── Expanded setup card panes ──────────────────────── */
+    .setup-pane {
+        border-top: 1px solid var(--border);
+        padding-top: 8px; margin-top: 8px;
+    }
+    .pane-label {
+        font-size: 0.63rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.1em; color: var(--muted); margin-bottom: 6px;
+    }
+    .pane-row {
+        display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: flex-end;
+    }
+    .pane-kv { display: flex; flex-direction: column; gap: 1px; }
+    .pane-k  { font-size: 0.63rem; color: var(--muted); }
+    .pane-v  { font-size: 0.85rem; font-weight: 600; color: var(--text); }
+    .pane-note  { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+    .pane-interp { font-size: 0.75rem; color: var(--yellow); }
+
+    /* ── Execution pane rows ────────────────────────────── */
+    .exec-pane .exec-row {
+        display: flex; gap: 8px; font-size: 0.8rem;
+        margin-bottom: 3px; align-items: flex-start;
+    }
+    .exec-k    { color: var(--muted); min-width: 68px; flex-shrink: 0; font-size: 0.73rem; }
+    .exec-v    { color: var(--text); }
+    .entry-note { color: var(--blue); }
+    .rr-val    { color: var(--green); font-weight: 700; }
+    .avoid-note { color: var(--muted); }
+
+    /* ── Options context pane ───────────────────────────── */
+    .options-context { border-top: 1px dashed rgba(55,65,81,0.5); }
+    .options-row {
+        display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px;
+    }
+    .options-badge {
+        padding: 2px 8px; border-radius: 999px;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+        border: 1px solid rgba(55,65,81,0.55);
+        background: rgba(255,255,255,0.03);
+    }
+    .expiry-short  { color: var(--green); }
+    .expiry-medium { color: var(--blue); }
+    .expiry-longer { color: var(--yellow); }
+    .options-metrics {
+        display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 6px;
+    }
+    .options-kv { display: flex; gap: 4px; align-items: center; font-size: 0.76rem; }
+    .options-k  { color: var(--muted); }
+    .options-v  { color: var(--text); font-weight: 700; }
+    .options-contract {
+        font-size: 0.76rem; color: var(--muted); margin-bottom: 5px;
+    }
+    .options-note {
+        font-size: 0.76rem; color: var(--text); margin-bottom: 2px;
+    }
+    .options-empty {
+        font-size: 0.74rem; color: #6b7280; font-style: italic;
+    }
+
+    /* ── Watchlist expanded context ─────────────────────── */
+    .watchlist-setup-type {
+        font-size: 0.63rem; padding: 1px 5px; border-radius: 3px;
+        background: rgba(97,175,239,0.08); color: var(--muted);
+        text-transform: capitalize;
+    }
+    .watchlist-context {
+        margin-top: 6px; padding-top: 6px;
+        border-top: 1px solid rgba(55,65,81,0.35);
+    }
+    .wl-kv-row { display: flex; flex-wrap: wrap; gap: 5px 14px; margin-bottom: 5px; }
+    .wl-kv  { display: flex; gap: 4px; font-size: 0.75rem; align-items: center; }
+    .wl-k   { color: var(--muted); }
+    .wl-v   { font-weight: 600; }
+    .wl-alignment { font-size: 0.72rem; color: #6b7280; margin-bottom: 5px; }
+    .wl-look-for  { font-size: 0.78rem; color: var(--text); margin-bottom: 3px; }
+    .wl-look-for::before  { content: "Look for: "; color: var(--muted); }
+    .wl-upgrades  { font-size: 0.73rem; color: var(--green); margin-bottom: 2px; }
+    .wl-upgrades::before  { content: "Upgrades if: "; color: var(--muted); font-style: italic; }
+    .wl-avoid     { font-size: 0.73rem; color: var(--red); }
+    .wl-avoid::before     { content: "Avoid if: "; color: var(--muted); font-style: italic; }
 
     @media (max-width: 640px) {
         .futures-grid { grid-template-columns: 1fr; }
@@ -468,11 +724,14 @@ _STYLE = """
 # ── Full HTML builder ────────────────────────────────────────
 
 def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None,
-                         month_events: list | None = None) -> str:
+                         month_events: list | None = None,
+                         options_map: dict[str, object] | None = None) -> str:
     if extra is None:
         extra = {}
     if month_events is None:
         month_events = []
+    if options_map is None:
+        options_map = {}
 
     _local  = datetime.now().astimezone()
     _utc    = datetime.now(timezone.utc)
@@ -501,96 +760,63 @@ def build_premarket_html(data_map: dict, setups: list, extra: dict | None = None
         "RISK ON":  "✓ RISK ON — favorable for long setups",
     }.get(regime, regime)
 
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pre-Market Report — {datetime.now().strftime('%b %d')}</title>
-    <style>{_STYLE}</style>
-</head>
-<body>
-<div class="page">
+    body = f"""
+    {nav_bar("premarket")}
 
-    <!-- Header -->
-    <div class="report-header">
-        <div>
-            <div class="report-title">Pre-Market Report</div>
-            <div class="report-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session</div>
-        </div>
-        <div class="pill-group">
-            <span class="pill {regime_cls}">{regime}</span>
-        </div>
-    </div>
+    {report_header(
+        title="Pre-Market Report",
+        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session",
+        regime=regime,
+        driver_text=f"{primary} &nbsp;·&nbsp; {secondary}",
+        note_text="Flagship execution plan: market context, validated top trades, watchlist setups, and embedded Options Context.",
+    )}
 
-    <!-- Futures -->
-    <div class="section">
-        <div class="section-title">Overnight Futures</div>
-        <div class="futures-grid">
-            {_futures_cards(data_map)}
-        </div>
-    </div>
+    {section_block("Overnight Futures", f'<div class="futures-grid">{_futures_cards(data_map)}</div>')}
 
-    <!-- Macro + Calendar side by side -->
     <div class="two-col">
-        <div class="section">
-            <div class="section-title">Macro Snapshot</div>
-            <div class="card">
-                <table class="macro-table">
-                    {_macro_rows(data_map)}
-                </table>
-                <div class="summary-box">{read}</div>
-            </div>
-        </div>
+        {section_block(
+            "Macro Snapshot",
+            card_block(
+                f'<table class="macro-table">{_macro_rows(data_map)}</table>'
+                f'<div class="summary-box">{read}</div>'
+            ),
+        )}
 
-        <div class="section">
-            <div class="section-title">Today's Events</div>
-            <div class="card">
-                {incident_html}
-                <table class="cal-table">
-                    {_calendar_rows(events)}
-                </table>
-                <div class="summary-box">
-                    Primary: {primary}<br>
-                    Secondary: {secondary}
-                </div>
-            </div>
-        </div>
+        {section_block(
+            "Today's Events",
+            card_block(
+                f'{incident_html}'
+                f'<table class="cal-table">{_calendar_rows(events)}</table>'
+                f'<div class="summary-box">Primary: {primary}<br>Secondary: {secondary}</div>'
+            ),
+        )}
     </div>
 
-    <!-- Upcoming This Month -->
-    <div class="section">
-        <div class="section-title">Upcoming This Month — High Impact Only</div>
-        <div class="card">
-            <table class="cal-table">
-                {_upcoming_rows(month_events)}
-            </table>
-        </div>
-    </div>
+    {section_block(
+        "Upcoming This Month — High Impact Only",
+        card_block(f'<table class="cal-table">{_upcoming_rows(month_events)}</table>'),
+    )}
 
-    <!-- Setups -->
-    <div class="section">
-        <div class="section-title">Validated Top Trades <span style="font-size:0.65rem;font-weight:400;color:var(--muted);margin-left:6px">structural guardrails only — options not yet validated</span></div>
-        <div class="regime-note {regime_note_cls}">{regime_note_text}</div>
-        <div class="setups-grid">
-            {_setup_cards(setups, regime)}
-        </div>
-    </div>
+    {section_block(
+        "Validated Top Trades",
+        f'<div class="section-subtitle">Structural guardrails with compact options context</div>'
+        f'<div class="regime-note {regime_note_cls}">{regime_note_text}</div>'
+        f'<div class="setups-grid">{_setup_cards(setups, regime, options_map)}</div>',
+    )}
 
-    <!-- Sector -->
-    <div class="section">
-        <div class="section-title">Sector Snapshot</div>
-        <div class="card">
-            <table class="sector-table">
-                {_sector_rows(data_map, extra)}
-            </table>
-        </div>
-    </div>
+    {section_block(
+        "Sector Snapshot",
+        card_block(f'<table class="sector-table">{_sector_rows(data_map, extra)}</table>'),
+    )}
 
-    <div class="footer">Macro Suite — Pre-Market Report</div>
-</div>
-</body>
-</html>"""
+    {footer("Pre-Market Report")}
+    """
+
+    return page_shell(
+        title=f"Pre-Market Report — {datetime.now().strftime('%b %d')}",
+        body_html=body,
+        extra_css=_STYLE,
+    )
 
 
 def save(path: str = "premarket.html", data_map: dict | None = None,
@@ -609,7 +835,19 @@ def save(path: str = "premarket.html", data_map: dict | None = None,
     if month_events is None:
         month_events = get_month_events()
 
-    html = build_premarket_html(data_map, setups, extra, month_events)
+    regime = classify(data_map)
+    validated, _, _ = _partition_setups(setups, regime)
+    options_map = {}
+    try:
+        from options.chain import analyze
+        options_map = {
+            s.ticker: analyze(s.ticker, s.bias, s.price)
+            for s in validated[:3]
+        }
+    except Exception:
+        options_map = {}
+
+    html = build_premarket_html(data_map, setups, extra, month_events, options_map)
     with open(path, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"HTML saved → {path}")

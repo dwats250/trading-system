@@ -11,6 +11,7 @@ from core.formatter import arrow, fmt_pct, fmt_price
 from macro.incidents import detect
 from macro.regime import classify, cross_asset_read, drivers
 from macro.session import current_session
+from outputs.shared import card_block, footer, nav_bar, page_shell, report_header, section_block
 from reports.options_sniper import Rejection, TradeIdea
 
 
@@ -352,19 +353,6 @@ def _macro_tags(data_map: dict) -> str:
 
 
 _STYLE = """
-    :root {
-        --bg: #1b1f27; --surface: #252b36; --surface2: #2a3140;
-        --border: #374151; --text: #d8dee9; --muted: #8b93a6;
-        --green: #98c379; --red: #e06c75; --yellow: #e5c07b; --blue: #61afef;
-        --gold: #e5c07b; --purple: #c678dd;
-        --shadow: 0 2px 16px rgba(0,0,0,0.5);
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: var(--bg); color: var(--text);
-           font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'SF Mono', ui-monospace, monospace;
-           font-size: 14px; line-height: 1.6; padding: 16px; }
-    .page { max-width: 1060px; margin: 0 auto; }
-
     /* Pipeline banner */
     .pipeline {
         background: var(--surface); border: 1px solid var(--border);
@@ -374,34 +362,6 @@ _STYLE = """
     }
     .pipe-step { color: var(--text); font-weight: 600; }
     .pipe-arrow { color: var(--border); }
-
-    /* Header */
-    .report-header {
-        background: linear-gradient(135deg, #252b36, #2a3140);
-        border: 1px solid var(--border); border-radius: 10px;
-        padding: 20px 24px; margin-bottom: 16px;
-        display: flex; justify-content: space-between; align-items: flex-start;
-        flex-wrap: wrap; gap: 16px;
-    }
-    .report-title { font-size: 1.6rem; font-weight: 800; letter-spacing: -0.02em; }
-    .report-meta { color: var(--muted); font-size: 0.88rem; margin-top: 4px; }
-    .regime-block { text-align: right; }
-    .regime-pill {
-        display: inline-block; padding: 8px 20px; border-radius: 999px;
-        font-size: 1rem; font-weight: 700; letter-spacing: 0.05em; border: 1px solid;
-    }
-    .regime-pill.off  { background: rgba(224,108,117,0.15); border-color: rgba(224,108,117,0.4); color: #e89099; }
-    .regime-pill.on   { background: rgba(152,195,121,0.15); border-color: rgba(152,195,121,0.4); color: #a8d69e; }
-    .regime-pill.mixed{ background: rgba(229,192,123,0.15); border-color: rgba(229,192,123,0.4); color: #ecd09a; }
-    .driver-text { color: var(--muted); font-size: 0.82rem; margin-top: 6px; }
-
-    /* Two col */
-    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px; }
-
-    /* Cards */
-    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
-    .card-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: 0.1em; color: var(--muted); margin-bottom: 12px; }
 
     /* Playbook */
     .pb-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: flex-start; }
@@ -536,6 +496,13 @@ _STYLE = """
         border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;
         font-size: 1rem; font-weight: 600; color: #93c5fd;
     }
+    .context-banner {
+        margin-bottom: 16px; padding: 12px 14px; border-radius: 12px;
+        background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+        color: var(--muted); font-size: 0.84rem;
+    }
+    .context-banner a { color: var(--blue); text-decoration: none; }
+    .context-banner a:hover { text-decoration: underline; }
 
     /* No setups */
     .no-setups { color: var(--muted); text-align: center; padding: 30px; font-size: 1rem; }
@@ -546,8 +513,6 @@ _STYLE = """
     .flat { color: var(--yellow);}
 
     .chart-wrap { margin-top: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
-    .footer { text-align: center; color: var(--muted); font-size: 0.78rem; padding: 20px 0 4px; }
-
     @media (max-width: 640px) {
         .two-col { grid-template-columns: 1fr; }
         .idea-grid { grid-template-columns: repeat(2, 1fr); }
@@ -625,80 +590,72 @@ def build_options_html(
     from reports.options_sniper import _conclusion
     conclusion_text = _conclusion(ideas, regime)
 
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Options Sniper — {datetime.now().strftime('%b %d')}</title>
-    <style>{_STYLE}</style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
-</head>
-<body>
-<div class="page">
+    body = f"""
+    {nav_bar("options_sniper")}
 
     <div class="pipeline">{pipe_html}</div>
 
-    <div class="report-header">
-        <div>
-            <div class="report-title">Options Sniper</div>
-            <div class="report-meta">Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session</div>
-        </div>
-        <div class="regime-block">
-            <div class="regime-pill {reg_cls}">{regime}</div>
-            <div class="driver-text">{primary}</div>
-        </div>
-    </div>
+    {card_block(
+        'Supplemental page only: Pre-Market is the flagship execution surface. '
+        'Use this drilldown when you need deeper ranked trade detail or extra options structure review. '
+        '<a href="premarket.html">Return to Pre-Market →</a>',
+        extra_cls="context-banner",
+    )}
+
+    {report_header(
+        title="Advanced Options Drilldown",
+        meta_line=f"Generated: {now} &nbsp;·&nbsp; Market ref: {utc_str} &nbsp;·&nbsp; {data_as_of} &nbsp;·&nbsp; {session} Session",
+        regime=regime,
+        driver_text=primary,
+        note_text="Secondary analysis page: advanced ranking and options detail beyond the main Pre-Market workflow.",
+    )}
 
     {incident_html}
 
     <div class="two-col">
-        <div class="card">
-            <div class="card-title">Playbook</div>
-            <div class="pb-row"><span class="pb-label">Size</span><span class="pb-val">{playbook['size']}</span></div>
-            <div class="pb-row"><span class="pb-label">Bias</span><span class="pb-val">{playbook['bias']}</span></div>
-            <div class="pb-row"><span class="pb-label">Focus</span><span class="pb-val pb-focus">{pb_focus}</span></div>
-            <div class="pb-row"><span class="pb-label">Avoid</span><span class="pb-val pb-avoid">{pb_avoid}</span></div>
-            {pb_notes}
-        </div>
+        {card_block(
+            f'<div class="pb-row"><span class="pb-label">Size</span><span class="pb-val">{playbook["size"]}</span></div>'
+            f'<div class="pb-row"><span class="pb-label">Bias</span><span class="pb-val">{playbook["bias"]}</span></div>'
+            f'<div class="pb-row"><span class="pb-label">Focus</span><span class="pb-val pb-focus">{pb_focus}</span></div>'
+            f'<div class="pb-row"><span class="pb-label">Avoid</span><span class="pb-val pb-avoid">{pb_avoid}</span></div>'
+            f'{pb_notes}',
+            title="Playbook",
+        )}
 
-        <div class="card">
-            <div class="card-title">Focus Router</div>
-            <div class="focus-row">
-                <span class="focus-label">Primary</span>
-                {focus_primary}
-            </div>
-            <div class="focus-row">
-                <span class="focus-label">Secondary</span>
-                {focus_secondary}
-            </div>
-            <div style="margin-top:12px">
-                <div class="card-title" style="margin-bottom:8px">Macro Tags</div>
-                <div class="macro-tags">{_macro_tags(data_map)}</div>
-            </div>
-        </div>
+        {card_block(
+            f'<div class="focus-row"><span class="focus-label">Primary</span>{focus_primary}</div>'
+            f'<div class="focus-row"><span class="focus-label">Secondary</span>{focus_secondary}</div>'
+            f'<div style="margin-top:12px"><div class="card-title" style="margin-bottom:8px">Macro Tags</div><div class="macro-tags">{_macro_tags(data_map)}</div></div>',
+            title="Focus Router",
+        )}
     </div>
 
-    <div class="ideas-section">
-        <div class="ideas-title">Validated Top Trades</div>
-        {ideas_html}
-    </div>
+    {section_block("Validated Top Trades", ideas_html, extra_cls="ideas-section")}
 
     {rejections_html}
 
     <div class="conclusion">{conclusion_text}</div>
 
-    <div class="card">
-        <div class="card-title">Macro Snapshot</div>
-        <div class="macro-tags" style="gap:10px">{_macro_tags(data_map)}</div>
-        <div style="margin-top:12px;color:var(--muted);font-size:0.88rem;border-left:3px solid var(--border);padding-left:10px">{read}</div>
-    </div>
+    {section_block(
+        "Macro Snapshot",
+        card_block(
+            f'<div class="macro-tags" style="gap:10px">{_macro_tags(data_map)}</div>'
+            f'<div style="margin-top:12px;color:var(--muted);font-size:0.88rem;border-left:3px solid var(--border);padding-left:10px">{read}</div>'
+        ),
+    )}
 
-    <div class="footer">Macro Suite — Options Sniper</div>
-</div>
-</body>
-</html>"""
+    {footer("Advanced Options Drilldown")}
+    """
+
+    return page_shell(
+        title=f"Advanced Options Drilldown — {datetime.now().strftime('%b %d')}",
+        body_html=body,
+        extra_css=_STYLE,
+        extra_head="""
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    """,
+    )
 
 
 def save(path: str = "options_sniper.html", data_map: dict | None = None,

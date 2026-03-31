@@ -35,6 +35,13 @@ _PAGE_CSS = """
         margin-bottom: 8px;
     }
     .hub-read { color: var(--muted); font-size: 0.9rem; max-width: 600px; margin: 10px auto 0; }
+    .hub-flow {
+        display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap;
+        margin-top: 14px; padding: 8px 14px; border-radius: 999px;
+        border: 1px solid rgba(96,165,250,0.18); background: rgba(96,165,250,0.06);
+        color: var(--text); font-size: 0.8rem;
+    }
+    .hub-flow span:last-child { color: var(--muted); }
 
     /* Report cards grid */
     .report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 20px; }
@@ -48,10 +55,22 @@ _PAGE_CSS = """
         border-color: rgba(96,165,250,0.4);
         background: rgba(11,24,41,0.9);
     }
+    .report-card.primary {
+        border-color: rgba(96,165,250,0.28);
+        background: linear-gradient(180deg, rgba(37,43,54,0.98), rgba(31,40,56,0.98));
+    }
+    .report-card.secondary {
+        opacity: 0.94;
+    }
     .rc-icon  { font-size: 1.5rem; }
     .rc-title { font-size: 1.05rem; font-weight: 700; }
     .rc-desc  { color: var(--muted); font-size: 0.82rem; line-height: 1.4; }
     .rc-arrow { color: var(--blue); font-size: 0.82rem; margin-top: auto; padding-top: 6px; }
+    .rc-role {
+        align-self: flex-start; padding: 3px 8px; border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.08); color: var(--muted); font-size: 0.7rem;
+        text-transform: uppercase; letter-spacing: 0.06em;
+    }
 
     /* Meta strip */
     .meta-strip {
@@ -70,22 +89,31 @@ _PAGE_CSS = """
 
 _REPORT_CARDS = [
     {
-        "href":  "macro_pulse.html",
-        "icon":  "📡",
-        "title": "Macro Pulse",
-        "desc":  "Live cross-asset dashboard. Regime, drivers, and key macro instruments at a glance.",
-    },
-    {
         "href":  "premarket.html",
         "icon":  "🌅",
         "title": "Pre-Market Report",
-        "desc":  "Morning brief: overnight futures, macro snapshot, economic calendar, and structural setups.",
+        "desc":  "Primary execution plan: overnight context, market posture, validated top trades, watchlist setups, and embedded options context.",
+        "role":  "Primary",
+        "card_cls": "primary",
+        "arrow": "Open execution plan →",
+    },
+    {
+        "href":  "macro_pulse.html",
+        "icon":  "📡",
+        "title": "Macro Pulse",
+        "desc":  "Context and regime dashboard: cross-asset tone, macro drivers, market posture, and the handoff into Pre-Market.",
+        "role":  "Context",
+        "card_cls": "",
+        "arrow": "Open market context →",
     },
     {
         "href":  "options_sniper.html",
         "icon":  "🎯",
-        "title": "Options Sniper",
-        "desc":  "Full pipeline: regime-filtered setups scored 0–100 with options analysis and validated trades.",
+        "title": "Advanced Options",
+        "desc":  "Secondary drilldown for deeper options structure review and ranked trade detail beyond the flagship Pre-Market flow.",
+        "role":  "Advanced",
+        "card_cls": "secondary",
+        "arrow": "Open drilldown →",
     },
 ]
 
@@ -112,11 +140,12 @@ def build_index_html(data_map: dict | None = None) -> str:
 
     cards_html = "".join(
         f"""
-        <a href="{c['href']}" class="report-card">
+        <a href="{c['href']}" class="report-card {c.get('card_cls', '')}">
             <div class="rc-icon">{c['icon']}</div>
+            <div class="rc-role">{c['role']}</div>
             <div class="rc-title">{c['title']}</div>
             <div class="rc-desc">{c['desc']}</div>
-            <div class="rc-arrow">Open report →</div>
+            <div class="rc-arrow">{c['arrow']}</div>
         </a>"""
         for c in _REPORT_CARDS
     )
@@ -126,9 +155,16 @@ def build_index_html(data_map: dict | None = None) -> str:
 
     <div class="hub-hero">
         <div class="hub-title">Macro Suite</div>
-        <div class="hub-tagline">Macro-aware options decision engine</div>
+        <div class="hub-tagline">One workflow: context first, execution second, options drilldown only when needed</div>
         <div class="hub-regime regime-pill {rcls}">{regime}</div>
         <div class="hub-read">{read}</div>
+        <div class="hub-flow">
+            <span>Macro Pulse</span>
+            <span>→</span>
+            <span>Pre-Market</span>
+            <span>→</span>
+            <span>Embedded Options Context</span>
+        </div>
     </div>
 
     <div class="meta-strip">
